@@ -1,0 +1,53 @@
+name: "Lampac"
+version: "1.0.0"
+slug: "lampac"
+description: >-
+  Lampac Next Generation — backend-сервер для Lampa. TorrServer, JacRed, Sync
+  и TimeCode включены по умолчанию (как в апстриме); дополнительно
+  предвключены аниме-провайдеры AniLiberty, AniLibria, Animevost, AnimeON,
+  AniMedia, MoonAnime, Mikai, AnimeLib.
+url: "https://github.com/lampac-nextgen/lampac"
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: services
+boot: auto
+hassio_api: false
+homeassistant_api: false
+host_network: false
+ingress: false
+panel_icon: mdi:television-play
+
+ports:
+  9118/tcp: 9118
+ports_description:
+  9118/tcp: "Lampac / Lampa backend API (используется клиентами Lampa напрямую)"
+
+map:
+  - app_config:rw
+  - share:rw
+
+options:
+  root_password: ""
+  port: 9118
+  timezone: "Europe/Kiev"
+  enable_torrserver: true
+  enable_jacred: true
+  enable_sync: true
+  enable_timecode: true
+  anime_providers: "AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib"
+  extra_init_json: ""
+
+schema:
+  root_password: password
+  port: port
+  timezone: str
+  enable_torrserver: bool
+  enable_jacred: bool
+  enable_sync: bool
+  enable_timecode: bool
+  anime_providers: str
+  extra_init_json: str?
+
+webui: "http://[HOST]:[PORT:9118]/"

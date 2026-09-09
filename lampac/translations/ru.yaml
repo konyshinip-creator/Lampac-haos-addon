@@ -1,0 +1,28 @@
+configuration:
+  root_password:
+    name: Пароль администратора
+    description: Пароль для панели /admin (root). Если пусто — при первом запуске будет "admin".
+  port:
+    name: Порт
+    description: TCP-порт, который слушает Lampac и к которому подключаются клиенты Lampa.
+  timezone:
+    name: Часовой пояс
+    description: Часовой пояс внутри контейнера.
+  enable_torrserver:
+    name: Включить TorrServer
+    description: Уже включён в апстриме по умолчанию. Выключайте, только если хотите его отключить (добавит в SkipModules).
+  enable_jacred:
+    name: Включить JacRed
+    description: Уже включён в апстриме по умолчанию. Выключайте, только если хотите его отключить.
+  enable_sync:
+    name: Включить Sync
+    description: Уже включён в апстриме по умолчанию. Выключайте, только если хотите его отключить.
+  enable_timecode:
+    name: Включить TimeCode
+    description: Уже включён в апстриме по умолчанию. Выключайте, только если хотите его отключить.
+  anime_providers:
+    name: Аниме-провайдеры
+    description: Список имён провайдеров (как в init.conf) через запятую, которые нужно явно включить, например AniLibria,AniLiberty,...
+  extra_init_json:
+    name: Доп. параметры init.conf (JSON)
+    description: Необязательный JSON-объект, который при каждом запуске подмешивается в init.conf. Не трогайте без необходимости.

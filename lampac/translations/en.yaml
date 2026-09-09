@@ -1,0 +1,28 @@
+configuration:
+  root_password:
+    name: Admin password
+    description: Password for the /admin panel (root). Leave empty to keep "admin" as default on first install.
+  port:
+    name: Port
+    description: TCP port Lampac listens on and that Lampa clients connect to.
+  timezone:
+    name: Timezone
+    description: Timezone used inside the container.
+  enable_torrserver:
+    name: Enable TorrServer
+    description: Already enabled upstream by default. Turn off only if you want to disable it (adds it to init.conf's SkipModules).
+  enable_jacred:
+    name: Enable JacRed
+    description: Already enabled upstream by default. Turn off only if you want to disable it.
+  enable_sync:
+    name: Enable Sync
+    description: Already enabled upstream by default. Turn off only if you want to disable it.
+  enable_timecode:
+    name: Enable TimeCode
+    description: Already enabled upstream by default. Turn off only if you want to disable it.
+  anime_providers:
+    name: Anime providers
+    description: Comma-separated list of anime provider names (as they appear in init.conf) to explicitly enable, e.g. AniLibria,AniLiberty,...
+  extra_init_json:
+    name: Advanced init.conf overrides (JSON)
+    description: Optional JSON object deep-merged into init.conf on every start. Leave empty unless you know what you're doing.
