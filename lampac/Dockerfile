@@ -1,33 +1,31 @@
 # Официальный образ: ghcr.io/lampac-nextgen/lampac (см. README проекта,
 # раздел Docker). Это НЕ docker.io/immisterio/lampac — того места
 # распространения образа не существует.
-#
-# Базовый образ Lampac работает НЕ от root (apt-get внутри него падает
-# с Permission denied на /var/lib/apt/lists). Поэтому jq не ставим через
-# apt в этом образе, а берём готовый статический бинарник из отдельного
-# стейджа на Alpine и просто копируем файл — это не требует прав root
-# в целевом образе и не трогает его пользователя/окружение.
-FROM alpine:3.20 AS jqbuilder
-RUN apk add --no-cache jq
-
 FROM ghcr.io/lampac-nextgen/lampac:latest
 
 # Базовый образ по умолчанию работает от непривилегированного пользователя
-# (отсюда Permission denied и на apt, и потенциально на COPY в /). Переходим
-# на root на все оставшиеся шаги сборки и на рантайм — run.sh всё равно
-# должен иметь право писать/симлинкать файлы внутри /lampac при каждом
-# старте, так что root здесь и корректен, и необходим.
+# (apt-get и запись в /lampac от него падают с Permission denied).
+# Переходим на root на всё оставшееся: и на сборку (нужно ставить пакет),
+# и на рантайм (run.sh должен иметь право писать/симлинковать файлы внутри
+# /lampac при каждом старте).
 USER root
 
-COPY --from=jqbuilder /usr/bin/jq /usr/local/bin/jq
+# ВАЖНО: jq ставим отсюда, через apt — то есть glibc-сборкой, совместимой
+# с этим (Debian/Ubuntu) образом. Более ранняя версия копировала статический
+# jq из alpine (musl libc) — он физически не может запуститься в
+# glibc-окружении ("cannot execute: required file not found", т.к. нет
+# /lib/ld-musl-x86_64.so.1). Никогда не смешивайте musl- и glibc-бинарники
+# между базовыми образами.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends jq \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /lampac
 
 # Сохраняем "чистые" init.conf/passwd из образа как дефолты (если они там
 # есть), чтобы run.sh мог один раз сгенерировать /config при первом старте.
 COPY run.sh /run.sh
-
-RUN chmod +x /run.sh /usr/local/bin/jq \
+RUN chmod +x /run.sh \
     && (cp init.conf init.conf.default 2>/dev/null || true) \
     && (cp passwd passwd.default 2>/dev/null || true)
 
