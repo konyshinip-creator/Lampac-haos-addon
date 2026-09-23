@@ -22,7 +22,7 @@ configuration:
     description: Already enabled upstream by default.
   enable_dlna:
     name: Enable DLNA
-    description: Disabled upstream by default.
+    description: Enabled upstream by default. Not safe to expose publicly without a firewall.
   enable_catalog:
     name: Enable Catalog
     description: Disabled upstream by default.
@@ -53,9 +53,12 @@ configuration:
   enable_telegramauthbot:
     name: Enable TelegramAuthBot
     description: Disabled upstream by default.
+  enable_potok:
+    name: Enable Potok
+    description: Disabled upstream by default.
   enable_admin_panel:
-    name: Enable built-in admin panel (/admin)
-    description: Turns on Lampac's own web UI at http://<IP>:9118/admin, where you can manage the full list of content sources (70+) and modules with checkboxes, without editing config files. Protected by root_password.
+    name: Enable built-in admin panel (/adminpanel/)
+    description: Turns on Lampac's own web UI at http://<IP>:9118/adminpanel/, where you can manage the full list of content sources (70+) and modules with checkboxes, without editing config files. Protected by root_password.
   anime_providers:
     name: Anime providers
     description: Comma-separated list of anime provider names (as they appear in init.conf) to explicitly enable, e.g. AniLibria,AniLiberty,...

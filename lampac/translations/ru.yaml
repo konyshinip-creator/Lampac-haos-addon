@@ -22,7 +22,7 @@ configuration:
     description: Уже включён в апстриме по умолчанию.
   enable_dlna:
     name: Включить DLNA
-    description: Выключен в апстриме по умолчанию.
+    description: Включён в апстриме по умолчанию. Небезопасно открывать наружу без файрвола.
   enable_catalog:
     name: Включить Catalog
     description: Выключен в апстриме по умолчанию.
@@ -53,9 +53,12 @@ configuration:
   enable_telegramauthbot:
     name: Включить TelegramAuthBot
     description: Выключен в апстриме по умолчанию.
+  enable_potok:
+    name: Включить Potok
+    description: Выключен в апстриме по умолчанию.
   enable_admin_panel:
-    name: Включить встроенную админку (/admin)
-    description: Включает собственный веб-интерфейс Lampac на http://<IP>:9118/admin, где чекбоксами управляется полный список источников контента (70+) и модулей — без правки конфигов. Защищён паролем root_password.
+    name: Включить встроенную админку (/adminpanel/)
+    description: Включает собственный веб-интерфейс Lampac на http://<IP>:9118/adminpanel/, где чекбоксами управляется полный список источников контента (70+) и модулей — без правки конфигов. Защищён паролем root_password.
   anime_providers:
     name: Аниме-провайдеры
     description: Список имён провайдеров (как в init.conf) через запятую, которые нужно явно включить, например AniLibria,AniLiberty,...

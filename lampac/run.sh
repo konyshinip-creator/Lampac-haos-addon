@@ -75,6 +75,7 @@ declare -A MODULE_OPTION=(
   [MsxNative]="enable_msxnative"
   [TelegramAuth]="enable_telegramauth"
   [TelegramAuthBot]="enable_telegramauthbot"
+  [Potok]="enable_potok"
 )
 
 for name in "${!MODULE_OPTION[@]}"; do
@@ -138,7 +139,7 @@ ln -snf "$CONF_DIR/module/AdminPanel/manifest.json" "$LAMPAC_HOME/module/AdminPa
 
 echo "[lampac-addon] init.conf -> $CONF_DIR/init.conf"
 if [ "$ENABLE_ADMIN_PANEL" = "true" ]; then
-  echo "[lampac-addon] AdminPanel включён -> http://<IP>:${PORT}/admin (пароль = root_password)"
+  echo "[lampac-addon] AdminPanel включён -> http://<IP>:${PORT}/adminpanel/ (пароль = root_password)"
 fi
 echo "[lampac-addon] Запуск Lampac на порту ${PORT} (TZ=${TIMEZONE}) ..."
 

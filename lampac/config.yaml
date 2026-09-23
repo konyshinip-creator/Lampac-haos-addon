@@ -38,8 +38,9 @@ options:
   enable_jacred: true
   enable_sync: true
   enable_timecode: true
-  # --- базовые модули, выключены по умолчанию в апстриме ---
-  enable_dlna: false
+  # --- DLNA включён по умолчанию в апстриме (base.conf), как и модули выше ---
+  enable_dlna: true
+  # --- базовые модули, выключены по умолчанию в апстриме (base.conf) ---
   enable_catalog: false
   enable_tracks: false
   enable_transcoding: false
@@ -50,6 +51,7 @@ options:
   enable_msxnative: false
   enable_telegramauth: false
   enable_telegramauthbot: false
+  enable_potok: false
   # --- встроенная админка Lampac (/admin) — полный список источников
   #     контента управляется оттуда, а не из этого аддона ---
   enable_admin_panel: false
@@ -76,6 +78,7 @@ schema:
   enable_msxnative: bool
   enable_telegramauth: bool
   enable_telegramauthbot: bool
+  enable_potok: bool
   enable_admin_panel: bool
   anime_providers: str
   extra_init_json: str?
