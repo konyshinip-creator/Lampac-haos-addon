@@ -43,7 +43,7 @@
 
 1. **Settings → Add-ons → Add-on Store → ⋮ → Repositories** → добавьте:
    ```
-   [https://github.com/infomirlabtest-alt/Lampac-haos-addon-](https://github.com/konyshinip-creator/Lampac-haos-addon.git)
+   https://github.com/konyshinip-creator/Lampac-haos-addon.git
    ```
 2. Аддон **Lampac** появится в списке доступных для установки — установите
    как обычный аддон.
