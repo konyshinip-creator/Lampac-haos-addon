@@ -14,12 +14,9 @@ json_get() {
 ROOT_PASSWORD=$(json_get '.root_password // ""')
 PORT=$(json_get '.port // 9118')
 TIMEZONE=$(json_get '.timezone // "Europe/Kiev"')
-ENABLE_TORRSERVER=$(json_get '.enable_torrserver // true')
-ENABLE_JACRED=$(json_get '.enable_jacred // true')
-ENABLE_SYNC=$(json_get '.enable_sync // true')
-ENABLE_TIMECODE=$(json_get '.enable_timecode // true')
 ANIME_PROVIDERS=$(json_get '.anime_providers // ""')
 EXTRA_JSON=$(json_get '.extra_init_json // ""')
+ENABLE_ADMIN_PANEL=$(json_get '.enable_admin_panel // false')
 
 [ -z "$PORT" ] && PORT=9118
 [ -z "$TIMEZONE" ] && TIMEZONE="Europe/Kiev"
@@ -43,7 +40,7 @@ fi
 tmp="$(mktemp)"
 jq --argjson port "$PORT" '.listen.port = $port' "$CONF_DIR/init.conf" > "$tmp" && mv "$tmp" "$CONF_DIR/init.conf"
 
-# --- Пароль root (WebLog/служебные функции админки) -------------------------
+# --- Пароль root (WebLog/AdminPanel/служебные функции) ----------------------
 if [ -n "$ROOT_PASSWORD" ]; then
   printf '%s' "$ROOT_PASSWORD" > "$CONF_DIR/passwd"
 elif [ ! -f "$CONF_DIR/passwd" ]; then
@@ -57,39 +54,49 @@ elif [ ! -f "$CONF_DIR/passwd" ]; then
   fi
 fi
 
-# --- Базовые модули (TorrServer/JacRed/Sync/TimeCode включены по умолчанию
-#     в самом Lampac — они НЕ в дефолтном SkipModules; здесь мы только
-#     добавляем их в SkipModules, если пользователь явно выключил опцию) ----
-tmp="$(mktemp)"
-jq '(.BaseModule.SkipModules // []) as $skip | $skip' "$CONF_DIR/init.conf" > /dev/null 2>&1 || true
-
-declare -A DISABLE_IF_FALSE=(
-  [TorrServer]="$ENABLE_TORRSERVER"
-  [JacRed]="$ENABLE_JACRED"
-  [Sync]="$ENABLE_SYNC"
-  [TimeCode]="$ENABLE_TIMECODE"
+# --- Базовые модули: управляются через BaseModule.SkipModules в init.conf --
+# Список и дефолты (true = уже включён в апстриме, false = уже выключен
+# в апстриме) взяты из официального README проекта. Опция false у модуля,
+# включённого по умолчанию, ДОБАВЛЯЕТ его в SkipModules; опция true у
+# модуля, выключенного по умолчанию, УБИРАЕТ его из SkipModules.
+declare -A MODULE_OPTION=(
+  [TorrServer]="enable_torrserver"
+  [JacRed]="enable_jacred"
+  [Sync]="enable_sync"
+  [TimeCode]="enable_timecode"
+  [DLNA]="enable_dlna"
+  [Catalog]="enable_catalog"
+  [Tracks]="enable_tracks"
+  [Transcoding]="enable_transcoding"
+  [WebLog]="enable_weblog"
+  [CacheMedia]="enable_cachemedia"
+  [ProxyLimiter]="enable_proxylimiter"
+  [ForkPlayerXML]="enable_forkplayerxml"
+  [MsxNative]="enable_msxnative"
+  [TelegramAuth]="enable_telegramauth"
+  [TelegramAuthBot]="enable_telegramauthbot"
 )
 
-for name in "${!DISABLE_IF_FALSE[@]}"; do
-  val="${DISABLE_IF_FALSE[$name]}"
+for name in "${!MODULE_OPTION[@]}"; do
+  opt_key="${MODULE_OPTION[$name]}"
+  val=$(json_get ".${opt_key} // empty")
+  [ -z "$val" ] && continue   # опция отсутствует в options.json -> не трогаем
   tmp="$(mktemp)"
-  if [ "$val" = "false" ]; then
-    # добавить в SkipModules, если ещё не там
-    jq --arg n "$name" \
-       '.BaseModule = ((.BaseModule // {}) ) | .BaseModule.SkipModules = (((.BaseModule.SkipModules // []) + [$n]) | unique)' \
-       "$CONF_DIR/init.conf" > "$tmp" && mv "$tmp" "$CONF_DIR/init.conf"
-  else
-    # убрать из SkipModules, если пользователь ранее выключал, а теперь включил обратно
+  if [ "$val" = "true" ]; then
     jq --arg n "$name" \
        '.BaseModule = ((.BaseModule // {})) | .BaseModule.SkipModules = ((.BaseModule.SkipModules // []) - [$n])' \
+       "$CONF_DIR/init.conf" > "$tmp" && mv "$tmp" "$CONF_DIR/init.conf"
+  else
+    jq --arg n "$name" \
+       '.BaseModule = ((.BaseModule // {})) | .BaseModule.SkipModules = (((.BaseModule.SkipModules // []) + [$n]) | unique)' \
        "$CONF_DIR/init.conf" > "$tmp" && mv "$tmp" "$CONF_DIR/init.conf"
   fi
 done
 
 # --- Аниме-провайдеры: каждый включается своим ключом верхнего уровня
-#     в init.conf, например {"AniLibria": {"enable": true}} — формат,
-#     задокументированный в README ("Конфигурация провайдеров"). Мы только
-#     ВКЛЮЧАЕМ перечисленные в опции, остальные провайдеры не трогаем. ------
+#     в init.conf, например {"AniLibria": {"enable": true}} — формат из
+#     README ("Конфигурация провайдеров"). Мы только ВКЛЮЧАЕМ перечисленные
+#     в опции, остальные провайдеры не трогаем. -----------------------------
 IFS=',' read -ra WANTED <<< "$ANIME_PROVIDERS"
 for w in "${WANTED[@]}"; do
   name="$(echo "$w" | xargs)"
@@ -113,7 +120,26 @@ fi
 ln -snf "$CONF_DIR/init.conf" "$LAMPAC_HOME/init.conf"
 ln -snf "$CONF_DIR/passwd" "$LAMPAC_HOME/passwd"
 
+# ---------------------------------------------------------------------------
+# AdminPanel — отдельный механизм (manifest.json в каталоге модуля, а не
+# SkipModules). Включает встроенную веб-админку Lampac на /admin, где
+# доступно управление ПОЛНЫМ списком источников (70+) и модулей — то, что
+# в рамках этого аддона мы намеренно не дублируем чекбоксами, чтобы не
+# зависеть от устаревающего списка имён провайдеров.
+# ---------------------------------------------------------------------------
+mkdir -p "$CONF_DIR/module/AdminPanel" "$LAMPAC_HOME/module/AdminPanel"
+if [ ! -f "$CONF_DIR/module/AdminPanel/manifest.json" ]; then
+  echo '{"enable": false}' > "$CONF_DIR/module/AdminPanel/manifest.json"
+fi
+tmp="$(mktemp)"
+jq --argjson en "$ENABLE_ADMIN_PANEL" '.enable = $en' \
+   "$CONF_DIR/module/AdminPanel/manifest.json" > "$tmp" && mv "$tmp" "$CONF_DIR/module/AdminPanel/manifest.json"
+ln -snf "$CONF_DIR/module/AdminPanel/manifest.json" "$LAMPAC_HOME/module/AdminPanel/manifest.json"
+
 echo "[lampac-addon] init.conf -> $CONF_DIR/init.conf"
+if [ "$ENABLE_ADMIN_PANEL" = "true" ]; then
+  echo "[lampac-addon] AdminPanel включён -> http://<IP>:${PORT}/admin (пароль = root_password)"
+fi
 echo "[lampac-addon] Запуск Lampac на порту ${PORT} (TZ=${TIMEZONE}) ..."
 
 cd "$LAMPAC_HOME"

@@ -10,12 +10,9 @@ FROM ghcr.io/lampac-nextgen/lampac:latest
 # /lampac при каждом старте).
 USER root
 
-# ВАЖНО: jq ставим отсюда, через apt — то есть glibc-сборкой, совместимой
-# с этим (Debian/Ubuntu) образом. Более ранняя версия копировала статический
-# jq из alpine (musl libc) — он физически не может запуститься в
-# glibc-окружении ("cannot execute: required file not found", т.к. нет
-# /lib/ld-musl-x86_64.so.1). Никогда не смешивайте musl- и glibc-бинарники
-# между базовыми образами.
+# jq ставим через apt (glibc-сборка, совместимая с этим Debian/Ubuntu
+# образом). НЕ копируйте статический jq из alpine (musl libc) — он не может
+# запуститься в glibc-окружении ("cannot execute: required file not found").
 RUN apt-get update \
     && apt-get install -y --no-install-recommends jq \
     && rm -rf /var/lib/apt/lists/*

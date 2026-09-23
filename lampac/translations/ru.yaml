@@ -1,7 +1,7 @@
 configuration:
   root_password:
     name: Пароль администратора
-    description: Пароль для панели /admin (root). Если пусто — при первом запуске будет "admin".
+    description: Пароль для /admin и /weblog. Если пусто — сгенерируется автоматически при первом старте (см. лог аддона).
   port:
     name: Порт
     description: TCP-порт, который слушает Lampac и к которому подключаются клиенты Lampa.
@@ -10,16 +10,52 @@ configuration:
     description: Часовой пояс внутри контейнера.
   enable_torrserver:
     name: Включить TorrServer
-    description: Уже включён в апстриме по умолчанию. Выключайте, только если хотите его отключить (добавит в SkipModules).
+    description: Уже включён в апстриме по умолчанию.
   enable_jacred:
     name: Включить JacRed
-    description: Уже включён в апстриме по умолчанию. Выключайте, только если хотите его отключить.
+    description: Уже включён в апстриме по умолчанию.
   enable_sync:
     name: Включить Sync
-    description: Уже включён в апстриме по умолчанию. Выключайте, только если хотите его отключить.
+    description: Уже включён в апстриме по умолчанию.
   enable_timecode:
     name: Включить TimeCode
-    description: Уже включён в апстриме по умолчанию. Выключайте, только если хотите его отключить.
+    description: Уже включён в апстриме по умолчанию.
+  enable_dlna:
+    name: Включить DLNA
+    description: Выключен в апстриме по умолчанию.
+  enable_catalog:
+    name: Включить Catalog
+    description: Выключен в апстриме по умолчанию.
+  enable_tracks:
+    name: Включить Tracks
+    description: Выключен в апстриме по умолчанию.
+  enable_transcoding:
+    name: Включить Transcoding
+    description: Выключен в апстриме по умолчанию. Требует ресурсов CPU/GStreamer.
+  enable_weblog:
+    name: Включить WebLog
+    description: Выключен в апстриме по умолчанию. Живой просмотр логов запросов.
+  enable_cachemedia:
+    name: Включить CacheMedia
+    description: Выключен в апстриме по умолчанию.
+  enable_proxylimiter:
+    name: Включить ProxyLimiter
+    description: Выключен в апстриме по умолчанию.
+  enable_forkplayerxml:
+    name: Включить ForkPlayerXML
+    description: Выключен в апстриме по умолчанию.
+  enable_msxnative:
+    name: Включить MsxNative
+    description: Выключен в апстриме по умолчанию.
+  enable_telegramauth:
+    name: Включить TelegramAuth
+    description: Выключен в апстриме по умолчанию.
+  enable_telegramauthbot:
+    name: Включить TelegramAuthBot
+    description: Выключен в апстриме по умолчанию.
+  enable_admin_panel:
+    name: Включить встроенную админку (/admin)
+    description: Включает собственный веб-интерфейс Lampac на http://<IP>:9118/admin, где чекбоксами управляется полный список источников контента (70+) и модулей — без правки конфигов. Защищён паролем root_password.
   anime_providers:
     name: Аниме-провайдеры
     description: Список имён провайдеров (как в init.conf) через запятую, которые нужно явно включить, например AniLibria,AniLiberty,...
