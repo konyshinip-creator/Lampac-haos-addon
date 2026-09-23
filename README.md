@@ -43,7 +43,7 @@
 
 1. **Settings → Add-ons → Add-on Store → ⋮ → Repositories** → добавьте:
    ```
-   https://github.com/infomirlabtest-alt/Lampac-haos-addon-
+   [https://github.com/infomirlabtest-alt/Lampac-haos-addon-](https://github.com/konyshinip-creator/Lampac-haos-addon.git)
    ```
 2. Аддон **Lampac** появится в списке доступных для установки — установите
    как обычный аддон.
@@ -61,17 +61,6 @@
 аддона. Полный список источников контента (VOD/аниме/18+, их 70+) управляется
 через встроенную админку Lampac — включите опцию `enable_admin_panel` и
 откройте `http://<IP хоста>:9118/admin`.
-
-## Известные проблемы и их решения
-
-См. раздел **Troubleshooting** в [`lampac/DOCS.md`](lampac/DOCS.md#troubleshooting) —
-там собраны реально встретившиеся проблемы (ошибки сборки образа, несовместимость
-библиотек, сбои первого запуска) с готовыми решениями.
-
-Если столкнулись с чем-то новым — заведите [Issue](../../issues) в этом репозитории.
-Баги самого Lampac (не связанные с запуском как аддона HA) лучше сразу
-сообщать в [апстрим](https://github.com/lampac-nextgen/lampac/issues) — здесь
-поддерживается только обёртка для Home Assistant.
 
 ## Отказ от ответственности
 
