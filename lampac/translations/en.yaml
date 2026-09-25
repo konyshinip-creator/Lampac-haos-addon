@@ -1,7 +1,7 @@
 configuration:
   root_password:
     name: Admin password
-    description: Password for /admin and /weblog. Leave empty to auto-generate on first start (check the addon log).
+    description: Password for /adminpanel/ and /weblog. Leave empty to auto-generate on first start (check the addon log).
   port:
     name: Port
     description: TCP port Lampac listens on and that Lampa clients connect to.

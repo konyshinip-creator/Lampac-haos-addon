@@ -1,7 +1,7 @@
 configuration:
   root_password:
     name: Пароль администратора
-    description: Пароль для /admin и /weblog. Если пусто — сгенерируется автоматически при первом старте (см. лог аддона).
+    description: Пароль для /adminpanel/ и /weblog. Если пусто — сгенерируется автоматически при первом старте (см. лог аддона).
   port:
     name: Порт
     description: TCP-порт, который слушает Lampac и к которому подключаются клиенты Lampa.

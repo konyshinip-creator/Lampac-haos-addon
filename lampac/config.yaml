@@ -2,11 +2,11 @@ name: "Lampac"
 version: "2026.09.25"
 slug: "lampac"
 description: >-
-  Lampac Next Generation — backend-сервер для Lampa. TorrServer, JacRed, Sync
-  и TimeCode включены по умолчанию (как в апстриме); дополнительно
+  Lampac Next Generation — backend-сервер для Lampa. TorrServer, JacRed, Sync,
+  TimeCode и DLNA включены по умолчанию (как в апстриме); дополнительно
   предвключены аниме-провайдеры AniLiberty, AniLibria, Animevost, AnimeON,
   AniMedia, MoonAnime, Mikai, AnimeLib. Остальные модули и источники можно
-  включать через опции или встроенную админку /admin.
+  включать через опции или встроенную админку /adminpanel/.
 url: "https://github.com/lampac-nextgen/lampac"
 arch:
   - amd64
@@ -52,7 +52,7 @@ options:
   enable_telegramauth: false
   enable_telegramauthbot: false
   enable_potok: false
-  # --- встроенная админка Lampac (/admin) — полный список источников
+  # --- встроенная админка Lampac (/adminpanel/) — полный список источников
   #     контента управляется оттуда, а не из этого аддона ---
   enable_admin_panel: false
   # --- аниме-провайдеры (см. DOCS.md) ---
