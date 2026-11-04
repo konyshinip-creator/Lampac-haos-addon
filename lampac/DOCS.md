@@ -36,10 +36,18 @@ Backend-сервер [Lampac Next Generation](https://github.com/lampac-nextgen/
 Опция `anime_providers` (список через запятую) в аддоне включает именно так
 перечисленные провайдеры. По умолчанию:
 
-`AniLiberty, AniLibria, Animevost, AnimeON, AniMedia, MoonAnime, Mikai, AnimeLib`
+`AniLiberty, AniLibria, Animevost, AnimeON, AniMedia, MoonAnime, Mikai, AnimeLib, AnimeGo, Kodik`
 
-(в апстриме всего 12 аниме-источников: к этому списку ещё относятся `AnimeGo`,
-`Animebesst`, `Dreamerscast` и универсальный `Kodik` — они не трогаются
+`AnimeGo` и `Kodik` нужны, в частности, для озвучки **AniStar**: у самого
+anistar.org нет провайдера в Lampac (сайт часто меняет зеркала), но его
+озвучка раздаётся через AnimeGo и Kodik. В апстриме `AnimeGo` в шаблоне
+выключен, поэтому аддон включает его явно.
+
+> Если аддон уже был установлен, Home Assistant сохранил старое значение
+> `anime_providers` — допишите `,AnimeGo,Kodik` в опцию вручную.
+
+(остальные аниме-источники апстрима, например `Animebesst`, `Dreamerscast`,
+`AniDub`, не трогаются
 этим аддоном и остаются в том состоянии, в котором идут по умолчанию).
 
 Аддон **не выключает** ничего, что не просили явно выключить — он только
