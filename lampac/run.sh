@@ -23,7 +23,7 @@ EXTRA_JSON=$(json_get '.extra_init_json // ""')
 
 [ -z "$PORT" ] && PORT=9118
 [ -z "$TIMEZONE" ] && TIMEZONE="Europe/Kiev"
-[ -z "$ANIME_PROVIDERS" ] && ANIME_PROVIDERS="AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib"
+[ -z "$ANIME_PROVIDERS" ] && ANIME_PROVIDERS="AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib,AnimeGo,Kodik"
 
 ln -snf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime 2>/dev/null || true
 export TZ="$TIMEZONE"

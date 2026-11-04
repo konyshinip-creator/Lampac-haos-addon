@@ -1,11 +1,12 @@
 name: "Lampac"
-version: "1.0.0"
+version: "1.0.1"
 slug: "lampac"
 description: >-
   Lampac Next Generation — backend-сервер для Lampa. TorrServer, JacRed, Sync
   и TimeCode включены по умолчанию (как в апстриме); дополнительно
   предвключены аниме-провайдеры AniLiberty, AniLibria, Animevost, AnimeON,
-  AniMedia, MoonAnime, Mikai, AnimeLib.
+  AniMedia, MoonAnime, Mikai, AnimeLib, AnimeGo, Kodik (AnimeGo и Kodik
+  дают в том числе озвучку AniStar).
 url: "https://github.com/lampac-nextgen/lampac"
 arch:
   - amd64
@@ -36,7 +37,7 @@ options:
   enable_jacred: true
   enable_sync: true
   enable_timecode: true
-  anime_providers: "AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib"
+  anime_providers: "AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib,AnimeGo,Kodik"
   extra_init_json: ""
 
 schema:
