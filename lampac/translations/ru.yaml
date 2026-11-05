@@ -23,6 +23,18 @@ configuration:
   anime_providers:
     name: Аниме-провайдеры
     description: Список имён провайдеров (как в init.conf) через запятую, которые нужно явно включить, например AniLibria,AniLiberty,...
+  enable_hentasis:
+    name: Включить Hentasis (18+)
+    description: Источник hentasis1.top в разделе 18+ (SISI). По умолчанию выключен.
+  enable_monitor:
+    name: Мониторинг источников
+    description: Периодически проверяет доступность Senku, AniStar, AniMaunt, Hentasis, плеера OpenNI и Kodik. Статус — http://IP:9118/animemon, JSON — /animemon/status.
+  monitor_interval:
+    name: Интервал проверки (мин)
+    description: Как часто проверять источники.
+  monitor_webhook:
+    name: Webhook при смене статуса
+    description: Необязательно. URL, на который отправляется POST с JSON, когда источник падает или поднимается (например, webhook Home Assistant).
   extra_init_json:
     name: Доп. параметры init.conf (JSON)
     description: Необязательный JSON-объект, который при каждом запуске подмешивается в init.conf. Не трогайте без необходимости.

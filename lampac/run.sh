@@ -20,10 +20,14 @@ ENABLE_SYNC=$(json_get '.enable_sync // true')
 ENABLE_TIMECODE=$(json_get '.enable_timecode // true')
 ANIME_PROVIDERS=$(json_get '.anime_providers // ""')
 EXTRA_JSON=$(json_get '.extra_init_json // ""')
+ENABLE_HENTASIS=$(json_get '.enable_hentasis // false')
+ENABLE_MONITOR=$(json_get '.enable_monitor // true')
+MONITOR_INTERVAL=$(json_get '.monitor_interval // 10')
+MONITOR_WEBHOOK=$(json_get '.monitor_webhook // ""')
 
 [ -z "$PORT" ] && PORT=9118
 [ -z "$TIMEZONE" ] && TIMEZONE="Europe/Kiev"
-[ -z "$ANIME_PROVIDERS" ] && ANIME_PROVIDERS="AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib,AnimeGo,Kodik"
+[ -z "$ANIME_PROVIDERS" ] && ANIME_PROVIDERS="AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib,AnimeGo,Kodik,Senku,Anistar,Animaunt"
 
 ln -snf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime 2>/dev/null || true
 export TZ="$TIMEZONE"
@@ -99,6 +103,20 @@ for w in "${WANTED[@]}"; do
      '.[$name] = ((.[$name] // {}) + {enable: true})' \
      "$CONF_DIR/init.conf" > "$tmp" && mv "$tmp" "$CONF_DIR/init.conf"
 done
+
+# --- Модули из папки mods/ этого аддона ------------------------------------
+#     Hentasis (18+) включается только явной опцией; монитор доступности
+#     источников — опциями enable_monitor / monitor_interval / monitor_webhook.
+[ -z "$MONITOR_INTERVAL" ] && MONITOR_INTERVAL=10
+tmp="$(mktemp)"
+jq --argjson hentasis "$( [ "$ENABLE_HENTASIS" = "true" ] && echo true || echo false )" \
+   --argjson monitor "$( [ "$ENABLE_MONITOR" = "false" ] && echo false || echo true )" \
+   --argjson interval "$MONITOR_INTERVAL" \
+   --arg webhook "$MONITOR_WEBHOOK" \
+   '.Hentasis = ((.Hentasis // {}) + {enable: $hentasis})
+    | .AnimeMonitor = ((.AnimeMonitor // {}) + {enable: $monitor, interval: $interval})
+    | if $webhook == "" then .AnimeMonitor |= del(.webhook) else .AnimeMonitor.webhook = $webhook end' \
+   "$CONF_DIR/init.conf" > "$tmp" && mv "$tmp" "$CONF_DIR/init.conf"
 
 # --- Произвольные overrides (глубокое слияние, приоритет у EXTRA_JSON) ------
 if [ -n "$EXTRA_JSON" ]; then

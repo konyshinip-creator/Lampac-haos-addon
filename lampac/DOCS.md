@@ -36,15 +36,14 @@ Backend-сервер [Lampac Next Generation](https://github.com/lampac-nextgen/
 Опция `anime_providers` (список через запятую) в аддоне включает именно так
 перечисленные провайдеры. По умолчанию:
 
-`AniLiberty, AniLibria, Animevost, AnimeON, AniMedia, MoonAnime, Mikai, AnimeLib, AnimeGo, Kodik`
+`AniLiberty, AniLibria, Animevost, AnimeON, AniMedia, MoonAnime, Mikai, AnimeLib, AnimeGo, Kodik, Senku, Anistar, Animaunt`
 
-`AnimeGo` и `Kodik` нужны, в частности, для озвучки **AniStar**: у самого
-anistar.org нет провайдера в Lampac (сайт часто меняет зеркала), но его
-озвучка раздаётся через AnimeGo и Kodik. В апстриме `AnimeGo` в шаблоне
-выключен, поэтому аддон включает его явно.
+`AnimeGo` и `Kodik` нужны, в частности, для озвучки **AniStar** в 720p.
+`Senku`, `Anistar` и `Animaunt` — собственные модули этого аддона (см. ниже).
 
 > Если аддон уже был установлен, Home Assistant сохранил старое значение
-> `anime_providers` — допишите `,AnimeGo,Kodik` в опцию вручную.
+> `anime_providers` — допишите `,AnimeGo,Kodik,Senku,Anistar,Animaunt` в
+> опцию вручную.
 
 (остальные аниме-источники апстрима, например `Animebesst`, `Dreamerscast`,
 `AniDub`, не трогаются
@@ -53,6 +52,26 @@ anistar.org нет провайдера в Lampac (сайт часто меня�
 Аддон **не выключает** ничего, что не просили явно выключить — он только
 добавляет `enable: true` для перечисленных провайдеров и не трогает
 остальную конфигурацию.
+
+## Собственные модули аддона
+
+В образ аддона копируется папка `mods/` этого репозитория. Lampac
+компилирует модули из неё при старте:
+
+| Модуль | Что даёт |
+|---|---|
+| `Senku` | senku.one: озвучки Kodik и собственные mp4 до 1080p и выше |
+| `Anistar` | anistar.org: плеер AniStar (озвучка, многоголосая, субтитры), поток через прокси Lampac |
+| `Animaunt` | animaunt.org: плеер OpenNI, mp4 до 1080p |
+| `Hentasis` | hentasis1.top в разделе 18+; включается опцией `enable_hentasis` |
+| `AnimeMonitor` | мониторинг доступности источников |
+
+**Мониторинг.** Страница `http://<IP HAOS>:9118/animemon`, JSON для
+REST-сенсора — `http://<IP HAOS>:9118/animemon/status`. Если задать опцию
+`monitor_webhook` (например, `http://<IP HA>:8123/api/webhook/anime-sources`),
+при каждом падении или восстановлении источника туда уйдёт POST с JSON.
+Готовые примеры сенсора и автоматизации, настройка зеркал и установка этих
+же модулей в обычный (не HA) Lampac — в `mods/README.md` репозитория.
 
 ## Где лежат конфиги (persistent)
 
@@ -106,6 +125,10 @@ Log-вкладку после первого старта.
 | `enable_sync` | `true` | Модуль Sync |
 | `enable_timecode` | `true` | Модуль TimeCode |
 | `anime_providers` | см. выше | Список аниме-источников через запятую, которые нужно явно включить |
+| `enable_hentasis` | `false` | Включить источник Hentasis (18+) |
+| `enable_monitor` | `true` | Мониторинг доступности источников (`/animemon`) |
+| `monitor_interval` | `10` | Интервал проверок, минуты |
+| `monitor_webhook` | *(пусто)* | URL для POST при смене статуса источника |
 | `extra_init_json` | *(пусто)* | Произвольный JSON, подмешиваемый в `init.conf` при каждом запуске |
 
 ## Автообновление

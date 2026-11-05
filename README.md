@@ -48,6 +48,27 @@ Lampac → Rebuild** (тег `:latest`, так что рескачает све�
 Проверить вручную, что Action работает: на GitHub → вкладка **Actions** →
 **Check for new Lampac image** → **Run workflow** (кнопка справа).
 
+## Модули для обычного Lampac
+
+Папка `lampac/mods/` содержит модули Senku, Anistar, Animaunt, Hentasis (18+)
+и AnimeMonitor (мониторинг доступности источников). Аддон включает их сам,
+а в любой другой Lampac NextGen их можно подключить одной записью в
+`mods/repository.yaml`:
+
+```yaml
+- repository: https://github.com/infomirlabtest-alt/Lampac-haos-addon-
+  branch: main
+  modules:
+    - lampac/mods/Senku
+    - lampac/mods/Anistar
+    - lampac/mods/Animaunt
+    - lampac/mods/Hentasis
+    - lampac/mods/AnimeMonitor
+```
+
+Подробности, настройки и примеры для Home Assistant —
+в [`lampac/mods/README.md`](lampac/mods/README.md).
+
 ## Дальнейшая настройка
 
 Все детали — какие модули включены, где лежат конфиги, что проверить после
