@@ -154,7 +154,7 @@ public class AnistarController : BaseOnlineController
             }
 
             if (entries.Count == 0)
-                return e.Fail(reqOk ? "Плеер AniStar для этого тайтла недоступен" : "playlist", refresh_proxy: !reqOk);
+                return e.Fail(reqOk ? "У этого тайтла на AniStar только внешний плеер DEEP — озвучка AniStar доступна через Kodik или Senku" : "playlist", refresh_proxy: !reqOk);
 
             return e.Success(entries);
         });
