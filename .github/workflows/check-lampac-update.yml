@@ -94,12 +94,19 @@ jobs:
           done
           docker logs lampac 2>&1 | grep -q "Configure complete" || { echo "::error::Lampac не закончил загрузку модулей"; docker logs lampac 2>&1 | tail -200; exit 1; }
           sleep 5
-          docker logs lampac 2>&1 | grep -iE "Senku|Anistar|Animaunt|Hentasis|AnimeMonitor" || true
           FAIL=0
+          for m in Senku Anistar Animaunt Hentasis AnimeMonitor; do
+            if docker logs lampac 2>&1 | grep -qE "^loaded module: $m[[:space:]]*$"; then
+              echo "module $m: loaded"
+            else
+              echo "::error::module $m не загрузился"; FAIL=1
+            fi
+          done
           for r in lite/senku lite/anistar lite/animaunt hentasis animemon/status; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "http://127.0.0.1:9118/$r" || true)
             echo "/$r -> $code"
-            case "$code" in 404|000|503) FAIL=1 ;; esac
+            # 503 — штатный ответ модуля на запрос без title (OnError), роут жив
+            case "$code" in 404|000) FAIL=1 ;; esac
           done
           if docker logs lampac 2>&1 | grep -E "error CS[0-9]+"; then FAIL=1; fi
           docker exec lampac cat /config/init.conf | jq -c '{SkipModules: .BaseModule.SkipModules, Senku, Anistar, Animaunt, Hentasis, AnimeMonitor}'
