@@ -6,7 +6,7 @@ description: >-
   всё, что работает без дополнительной настройки: базовые модули (TorrServer,
   JacRed, Sync, TimeCode, DLNA, Catalog, Tracks, WebLog, ForkPlayerXML,
   MsxNative, Potok), админка /adminpanel/, все бесплатные онлайн- и
-  аниме-провайдеры, свои модули Senku, AniStar, AniMaunt, Hentasis (18+) и
+  аниме-провайдеры, свои модули Senku, AniStar, AniMaunt, AnimeFox, AniTokyo, Hentasis и HentaiUkr (18+) и
   монитор доступности источников.
 url: "https://github.com/lampac-nextgen/lampac"
 arch:
@@ -58,10 +58,12 @@ options:
   # --- встроенная админка Lampac (/adminpanel/), защищена root_password ---
   enable_admin_panel: true
   # --- онлайн-провайдеры (см. DOCS.md) ---
-  anime_providers: "AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib,AnimeGo,Kodik,AniDub,AiLiberty,Animebesst,Dreamerscast,Senku,Anistar,Animaunt"
+  anime_providers: "AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib,AnimeGo,Kodik,AniDub,AiLiberty,Animebesst,Dreamerscast,Senku,Anistar,Animaunt,AnimeFox,AniTokyo"
   online_providers: "FanCDN,FlixCDN,Videoseed,Mirage,Spectre,Kinoukr,Autoembed,Playembed,Rgshows,Twoembed"
   # --- свои модули этого репозитория ---
   enable_hentasis: true
+  enable_hentaiukr: true
+  xhamster_host: "https://ua.xhamster2.com"
   enable_monitor: true
   monitor_interval: 10
   monitor_webhook: ""
@@ -93,6 +95,8 @@ schema:
   anime_providers: str
   online_providers: str
   enable_hentasis: bool
+  enable_hentaiukr: bool
+  xhamster_host: str?
   enable_monitor: bool
   monitor_interval: int(1,1440)
   monitor_webhook: str?

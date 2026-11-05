@@ -49,7 +49,10 @@ public class ModInit : IModuleLoaded
         new() { name = "Senku",    url = "https://senku.one/senku-api/api/v2/search?q=naruto", marker = "\"ok\":true" },
         new() { name = "Anistar",  url = "https://anistar.org/robots.txt",   marker = "User-agent" },
         new() { name = "Animaunt", url = "https://animaunt.org/robots.txt",  marker = "User-agent" },
+        new() { name = "AnimeFox", url = "https://www.animefox.org/robots.txt", marker = "User-agent" },
+        new() { name = "AniTokyo", url = "https://anitokyo.tv/robots.txt", marker = "User-agent" },
         new() { name = "Hentasis", url = "https://hentasis1.top/robots.txt", marker = "User-agent" },
+        new() { name = "HentaiUkr", url = "https://hentaiukr.com/robots.txt", marker = "User-agent" },
         new() { name = "OpenNI (плеер AniMaunt)", url = "https://play.openni.ru/?cid=2398", marker = "Playerjs" },
         new() { name = "Kodik",    url = "https://kodikplayer.com/" }
     };

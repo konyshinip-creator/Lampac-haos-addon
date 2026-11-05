@@ -10,7 +10,10 @@ Lampac компилирует их Roslyn-ом при старте (и пере�
 | `Senku` | Онлайн (аниме) | senku.one: поиск, озвучки Kodik (до 720p) и собственные mp4 до 1080p/2160p. Ключ тайтла — Shikimori ID |
 | `Anistar` | Онлайн (аниме) | anistar.org: свой плеер AniStar (озвучка, многоголосая, субтитры). Поток идёт через прокси Lampac, потому что CDN требует Referer |
 | `Animaunt` | Онлайн (аниме) | animaunt.org: плеер OpenNI, прямые mp4 до 1080p. Тайтлы с плеером Kodik пропускаются — их отдаёт балансер Kodik |
+| `AnimeFox` | Онлайн (аниме) | animefox.org: поиск, озвучки и серии плеера Kodik. Поток отдаёт встроенный модуль Kodik, он должен быть включён. Раздел сайта /hentai/ не показывается |
+| `AniTokyo` | Онлайн (аниме) | anitokyo.tv: поиск, озвучки и серии плеера Kodik. Поток отдаёт встроенный модуль Kodik, он должен быть включён. Серии Sibnet и VK не показываются |
 | `Hentasis` | 18+ (SISI) | hentasis1.top: каталог, поиск, серии с озвучкой и субтитрами. **Выключен по умолчанию** |
+| `HentaiUkr` | 18+ (SISI) | hentaiukr.com: каталог, поиск, прямые mp4 до 1080p. Тайтлы с тегами «Школа» и «Школярки» и тайтлы без тегов не показываются, это не настройка. **Выключен по умолчанию** |
 | `AnimeMonitor` | Служебный | Мониторинг доступности источников: страница `/animemon`, JSON `/animemon/status`, webhook при смене статуса |
 
 ## Установка в обычный Lampac
@@ -27,7 +30,10 @@ Lampac компилирует их Roslyn-ом при старте (и пере�
     - lampac/mods/Senku
     - lampac/mods/Anistar
     - lampac/mods/Animaunt
+    - lampac/mods/AnimeFox
+    - lampac/mods/AniTokyo
     - lampac/mods/Hentasis
+    - lampac/mods/HentaiUkr
     - lampac/mods/AnimeMonitor
 ```
 
@@ -57,9 +63,9 @@ services:
 (**Настройки → Расширения → Добавить плагин**) достаточно стандартных плагинов
 Lampac:
 
-- `http://<IP Lampac>:9118/online.js` — Senku, AniStar и AniMaunt появятся в
+- `http://<IP Lampac>:9118/online.js` — Senku, AniStar, AniMaunt, AnimeFox и AniTokyo появятся в
   списке источников кнопки **Онлайн** в карточках аниме;
-- `http://<IP Lampac>:9118/sisi.js` — Hentasis появится в разделе 18+.
+- `http://<IP Lampac>:9118/sisi.js` — Hentasis и HentaiUkr появятся в разделе 18+.
 
 Если источника нет в списке, проверьте, что он включён в `init.conf`
 (`"enable": true`, см. ниже), и посмотрите `/animemon` — сайт может быть
@@ -76,7 +82,11 @@ Lampac:
   "Senku":    { "enable": true },
   "Anistar":  { "enable": true, "host": "https://anistar.org" },
   "Animaunt": { "enable": true },
+  "AnimeFox": { "enable": true },
+  "AniTokyo": { "enable": true },
   "Hentasis": { "enable": true },
+  "HentaiUkr": { "enable": true },
+  "Xhamster": { "host": "https://ua.xhamster2.com" },
   "AnimeMonitor": {
     "enable": true,
     "interval": 10,
@@ -87,11 +97,14 @@ Lampac:
 ```
 
 Если сайт переехал на новое зеркало, достаточно поменять `host` в его секции.
+Так же настроен встроенный Xhamster: новый модуль ему не нужен, адрес зеркала
+задаётся полем `host`, в аддоне Home Assistant — опцией `xhamster_host`.
 
 ### Монитор доступности
 
 По умолчанию проверяются senku.one (JSON-поиск), anistar.org, animaunt.org,
-hentasis1.top (по `robots.txt`), плеер OpenNI и Kodik. Состояния:
+animefox.org, anitokyo.tv, hentasis1.top, hentaiukr.com (по `robots.txt`), плеер
+OpenNI и Kodik. Состояния:
 
 - `up` — сайт отвечает как ожидается;
 - `challenge` — ответила защита (Cloudflare/DDoS-Guard), 403/429 или пришла
@@ -159,6 +172,8 @@ automation:
 - Форматы сайтов разобраны на нескольких тайтлах; при изменении вёрстки
   модуль просто перестанет показывать источник (смотрите монитор и лог).
 - API senku.one закрытое и может поменяться без предупреждения.
+- hentai-hub.net модуля не имеет: все его страницы закрыты капчей с проверкой
+  возраста.
 - Тайтлы anistar с внешним плеером DEEP (`deep-ent.ru`) не поддерживаются —
   этот плеер сознательно закрыт для сторонних сайтов. Их озвучка есть в Kodik.
 - С IP дата-центров Cloudflare/DDoS-Guard могут вести себя строже, чем с
