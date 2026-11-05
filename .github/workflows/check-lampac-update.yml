@@ -87,13 +87,19 @@ jobs:
           done
           curl -fsS http://127.0.0.1:9118/version
           echo
-          # даём Roslyn докомпилировать dynamic-модули
-          sleep 20
+          # ждём, пока Lampac загрузит все модули (до этого роуты отвечают 503)
+          for i in $(seq 1 60); do
+            if docker logs lampac 2>&1 | grep -q "Configure complete"; then break; fi
+            sleep 5
+          done
+          docker logs lampac 2>&1 | grep -q "Configure complete" || { echo "::error::Lampac не закончил загрузку модулей"; docker logs lampac 2>&1 | tail -200; exit 1; }
+          sleep 5
+          docker logs lampac 2>&1 | grep -iE "Senku|Anistar|Animaunt|Hentasis|AnimeMonitor" || true
           FAIL=0
           for r in lite/senku lite/anistar lite/animaunt hentasis animemon/status; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "http://127.0.0.1:9118/$r" || true)
             echo "/$r -> $code"
-            if [ "$code" = "404" ] || [ "$code" = "000" ]; then FAIL=1; fi
+            case "$code" in 404|000|503) FAIL=1 ;; esac
           done
           if docker logs lampac 2>&1 | grep -E "error CS[0-9]+"; then FAIL=1; fi
           docker exec lampac cat /config/init.conf | jq -c '{SkipModules: .BaseModule.SkipModules, Senku, Anistar, Animaunt, Hentasis, AnimeMonitor}'
