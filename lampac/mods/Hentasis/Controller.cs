@@ -123,28 +123,56 @@ public class HentasisController : BaseSisiController
         return list;
     }
 
+    static readonly Regex rxShortLink = new("<a\\s[^>]*class=\"short-link[^\"]*\"[^>]*href=\"(?:https?://[^/\"]+)?/(\\d+-[^\"/]+\\.html)\"[^>]*>([^<]*)</a>", RegexOptions.Compiled);
+    static readonly Regex rxShortImg = new("<div class=\"short-img\">\\s*(<img\\s[^>]*>)", RegexOptions.Compiled);
+
     /// <summary>
-    /// Главная/страницы каталога: берём ссылки на тайтлы с картинкой внутри, кроме карусели рекомендаций.
+    /// Главная/страницы каталога (DLE, шаблон short-item):
+    /// div.short-item → h3 > a.short-link (ссылка и название) + div.short-img > img (постер).
+    /// Записи из рубрики «Новости сайта» (/news/) — не тайтлы, пропускаем.
     /// </summary>
     List<PlaylistItem> ParseListing(string html)
     {
         var list = new List<PlaylistItem>();
 
+        foreach (string item in html.Split("<div class=\"short-item\">").Skip(1))
+        {
+            if (item.Contains("/news/\"", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var link = rxShortLink.Match(item);
+            if (!link.Success)
+                continue;
+
+            string name = link.Groups[2].Value, src = null;
+
+            var img = rxShortImg.Match(item);
+            if (img.Success)
+            {
+                src = rxSrc.Match(img.Groups[1].Value).Groups[1].Value;
+                string alt = rxAlt.Match(img.Groups[1].Value).Groups[1].Value;
+                if (string.IsNullOrWhiteSpace(name))
+                    name = alt;
+            }
+
+            Add(list, link.Groups[1].Value, name, src);
+        }
+
+        if (list.Count > 0)
+            return list;
+
+        // запасной вариант для другой вёрстки: любые ссылки на тайтлы с картинкой внутри
         foreach (Match m in rxAnchor.Matches(html))
         {
-            string attrs = m.Groups[1].Value + m.Groups[3].Value;
-            if (attrs.Contains("carou", StringComparison.OrdinalIgnoreCase))
+            var im = rxImg.Match(m.Groups[4].Value);
+            if (!im.Success)
                 continue;
 
-            var img = rxImg.Match(m.Groups[4].Value);
-            if (!img.Success)
-                continue;
-
-            string src = rxSrc.Match(img.Value).Groups[1].Value;
+            string src = rxSrc.Match(im.Value).Groups[1].Value;
             if (string.IsNullOrEmpty(src))
                 continue;
 
-            string name = rxAlt.Match(img.Value).Groups[1].Value;
+            string name = rxAlt.Match(im.Value).Groups[1].Value;
             if (string.IsNullOrWhiteSpace(name))
                 name = Regex.Replace(m.Groups[4].Value, "<[^>]+>", " ").Trim();
 
