@@ -21,7 +21,7 @@ Lampac компилирует их Roslyn-ом при старте (и пере�
 если он уже есть):
 
 ```yaml
-- repository: https://github.com/infomirlabtest-alt/Lampac-haos-addon-
+- repository: https://github.com/konyshinip-creator/Lampac-haos-addon
   branch: main
   modules:
     - lampac/mods/Senku
@@ -32,8 +32,10 @@ Lampac компилирует их Roslyn-ом при старте (и пере�
 ```
 
 При каждом старте Lampac проверяет последний коммит ветки и, если он
-изменился, скачивает модули в `module/Lampac-haos-addon-/<Модуль>/`.
-Лишние строки из списка можно убрать.
+изменился, скачивает модули в `module/<имя репозитория>/<Модуль>/`.
+Лишние строки из списка можно убрать. Вместо `konyshinip-creator/Lampac-haos-addon`
+можно указать зеркало `https://github.com/infomirlabtest-alt/Lampac-haos-addon-`,
+содержимое одинаковое.
 
 ### Вариант 2: вручную
 
@@ -48,6 +50,20 @@ services:
       - ./mods/Senku:/lampac/mods/Senku
       - ./mods/Anistar:/lampac/mods/Anistar
 ```
+
+### Подключение в Lampa
+
+Модули работают на сервере, отдельных плагинов у них нет. В Lampa
+(**Настройки → Расширения → Добавить плагин**) достаточно стандартных плагинов
+Lampac:
+
+- `http://<IP Lampac>:9118/online.js` — Senku, AniStar и AniMaunt появятся в
+  списке источников кнопки **Онлайн** в карточках аниме;
+- `http://<IP Lampac>:9118/sisi.js` — Hentasis появится в разделе 18+.
+
+Если источника нет в списке, проверьте, что он включён в `init.conf`
+(`"enable": true`, см. ниже), и посмотрите `/animemon` — сайт может быть
+недоступен.
 
 ## Настройка (`init.conf`)
 

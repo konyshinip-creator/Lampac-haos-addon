@@ -1,7 +1,7 @@
 configuration:
   root_password:
     name: Admin password
-    description: Password for the /admin panel (root). Leave empty to keep "admin" as default on first install.
+    description: Password for /adminpanel/ and /weblog. Leave empty to auto-generate on first start (check the addon log).
   port:
     name: Port
     description: TCP port Lampac listens on and that Lampa clients connect to.
@@ -10,31 +10,79 @@ configuration:
     description: Timezone used inside the container.
   enable_torrserver:
     name: Enable TorrServer
-    description: Already enabled upstream by default. Turn off only if you want to disable it (adds it to init.conf's SkipModules).
+    description: Already enabled upstream by default.
   enable_jacred:
     name: Enable JacRed
-    description: Already enabled upstream by default. Turn off only if you want to disable it.
+    description: Already enabled upstream by default.
   enable_sync:
     name: Enable Sync
-    description: Already enabled upstream by default. Turn off only if you want to disable it.
+    description: Already enabled upstream by default.
   enable_timecode:
     name: Enable TimeCode
-    description: Already enabled upstream by default. Turn off only if you want to disable it.
+    description: Already enabled upstream by default.
+  enable_dlna:
+    name: Enable DLNA
+    description: Enabled upstream by default. Not safe to expose publicly without a firewall.
+  enable_catalog:
+    name: Enable Catalog
+    description: Disabled upstream, enabled by default in this add-on.
+  enable_tracks:
+    name: Enable Tracks
+    description: Disabled upstream, enabled by default in this add-on (audio track detection via ffprobe).
+  enable_transcoding:
+    name: Enable Transcoding
+    description: Disabled upstream by default. Needs GStreamer/CPU resources.
+  enable_weblog:
+    name: Enable WebLog
+    description: Disabled upstream, enabled by default in this add-on. Live request log viewer (/weblog, root password).
+  enable_cachemedia:
+    name: Enable CacheMedia
+    description: Off by default — caches video on disk and can use a lot of space.
+  enable_proxylimiter:
+    name: Enable ProxyLimiter
+    description: Off by default — limits the proxy, only useful for public servers.
+  enable_forkplayerxml:
+    name: Enable ForkPlayerXML
+    description: Disabled upstream, enabled by default in this add-on.
+  enable_msxnative:
+    name: Enable MsxNative
+    description: Disabled upstream, enabled by default in this add-on.
+  enable_telegramauth:
+    name: Enable TelegramAuth
+    description: Off by default — needs a Telegram bot configured in init.conf.
+  enable_telegramauthbot:
+    name: Enable TelegramAuthBot
+    description: Off by default — needs a Telegram bot token in init.conf.
+  enable_potok:
+    name: Enable Potok
+    description: Disabled upstream, enabled by default in this add-on (/naked-gun and /blue-oyster plugins).
+  enable_admin_panel:
+    name: Enable built-in admin panel (/adminpanel/)
+    description: Lampac's own web UI at http://<IP>:9118/adminpanel/ with checkboxes for all 70+ sources and modules. Protected by root_password. On by default.
+  enable_seriesnotify:
+    name: Enable SeriesNotify
+    description: Off by default. Telegram notifications about new episodes, needs a bot token.
+  enable_qrauth:
+    name: Enable QRAuth
+    description: Off by default. QR login via a Telegram bot, needs setup.
   anime_providers:
     name: Anime providers
-    description: Comma-separated list of anime provider names (as they appear in init.conf) to explicitly enable, e.g. AniLibria,AniLiberty,...
+    description: Comma-separated anime providers (names as in init.conf) to enable. Default — all free ones plus Senku, Anistar, Animaunt.
+  online_providers:
+    name: Online providers (movies/series)
+    description: Providers that are disabled upstream but work without an account. Empty string enables nothing extra. Mirage, Spectre, Videoseed and ENG sources use Lampac's built-in browser.
   enable_hentasis:
     name: Enable Hentasis (18+)
-    description: hentasis1.top source in the 18+ (SISI) section. Disabled by default.
+    description: hentasis1.top source in the 18+ (SISI) section. On by default.
   enable_monitor:
-    name: Source monitoring
-    description: Periodically checks Senku, AniStar, AniMaunt, Hentasis, the OpenNI player and Kodik. Status page at http://IP:9118/animemon, JSON at /animemon/status.
+    name: Source monitor
+    description: Periodically checks Senku, AniStar, AniMaunt, Hentasis, the OpenNI player and Kodik. Status at http://IP:9118/animemon, JSON at /animemon/status.
   monitor_interval:
     name: Check interval (min)
     description: How often to check the sources.
   monitor_webhook:
     name: Status change webhook
-    description: Optional URL that receives a JSON POST whenever a source goes down or comes back (e.g. a Home Assistant webhook).
+    description: Optional. URL that receives a JSON POST when a source goes down or comes back (e.g. a Home Assistant webhook).
   extra_init_json:
     name: Advanced init.conf overrides (JSON)
     description: Optional JSON object deep-merged into init.conf on every start. Leave empty unless you know what you're doing.

@@ -1,7 +1,7 @@
 configuration:
   root_password:
     name: Пароль администратора
-    description: Пароль для панели /admin (root). Если пусто — при первом запуске будет "admin".
+    description: Пароль для /adminpanel/ и /weblog. Если пусто — сгенерируется автоматически при первом старте (см. лог аддона).
   port:
     name: Порт
     description: TCP-порт, который слушает Lampac и к которому подключаются клиенты Lampa.
@@ -10,22 +10,70 @@ configuration:
     description: Часовой пояс внутри контейнера.
   enable_torrserver:
     name: Включить TorrServer
-    description: Уже включён в апстриме по умолчанию. Выключайте, только если хотите его отключить (добавит в SkipModules).
+    description: Уже включён в апстриме по умолчанию.
   enable_jacred:
     name: Включить JacRed
-    description: Уже включён в апстриме по умолчанию. Выключайте, только если хотите его отключить.
+    description: Уже включён в апстриме по умолчанию.
   enable_sync:
     name: Включить Sync
-    description: Уже включён в апстриме по умолчанию. Выключайте, только если хотите его отключить.
+    description: Уже включён в апстриме по умолчанию.
   enable_timecode:
     name: Включить TimeCode
-    description: Уже включён в апстриме по умолчанию. Выключайте, только если хотите его отключить.
+    description: Уже включён в апстриме по умолчанию.
+  enable_dlna:
+    name: Включить DLNA
+    description: Включён в апстриме по умолчанию. Небезопасно открывать наружу без файрвола.
+  enable_catalog:
+    name: Включить Catalog
+    description: Выключен в апстриме, в аддоне включён по умолчанию.
+  enable_tracks:
+    name: Включить Tracks
+    description: Выключен в апстриме, в аддоне включён по умолчанию (определение аудиодорожек через ffprobe).
+  enable_transcoding:
+    name: Включить Transcoding
+    description: Выключен в апстриме по умолчанию. Требует ресурсов CPU/GStreamer.
+  enable_weblog:
+    name: Включить WebLog
+    description: Выключен в апстриме, в аддоне включён по умолчанию. Живой просмотр логов запросов (/weblog, пароль root).
+  enable_cachemedia:
+    name: Включить CacheMedia
+    description: Выключен по умолчанию — кэширует видео на диск, может занять много места.
+  enable_proxylimiter:
+    name: Включить ProxyLimiter
+    description: Выключен по умолчанию — ограничивает прокси, нужен только для публичных серверов.
+  enable_forkplayerxml:
+    name: Включить ForkPlayerXML
+    description: Выключен в апстриме, в аддоне включён по умолчанию.
+  enable_msxnative:
+    name: Включить MsxNative
+    description: Выключен в апстриме, в аддоне включён по умолчанию.
+  enable_telegramauth:
+    name: Включить TelegramAuth
+    description: Выключен по умолчанию — требует настройки Telegram-бота в init.conf.
+  enable_telegramauthbot:
+    name: Включить TelegramAuthBot
+    description: Выключен по умолчанию — требует токена Telegram-бота в init.conf.
+  enable_potok:
+    name: Включить Potok
+    description: Выключен в апстриме, в аддоне включён по умолчанию (плагины /naked-gun и /blue-oyster).
+  enable_admin_panel:
+    name: Включить встроенную админку (/adminpanel/)
+    description: Веб-интерфейс Lampac на http://<IP>:9118/adminpanel/ — чекбоксы для всех 70+ источников и модулей без правки конфигов. Защищён паролем root_password. Включён по умолчанию.
+  enable_seriesnotify:
+    name: Включить SeriesNotify
+    description: Выключен по умолчанию — Telegram-уведомления о новых сериях, требует токена бота.
+  enable_qrauth:
+    name: Включить QRAuth
+    description: Выключен по умолчанию — вход по QR через Telegram-бота, требует настройки.
   anime_providers:
     name: Аниме-провайдеры
-    description: Список имён провайдеров (как в init.conf) через запятую, которые нужно явно включить, например AniLibria,AniLiberty,...
+    description: Аниме-провайдеры через запятую (имена как в init.conf), которые нужно включить. По умолчанию — все бесплатные плюс Senku, Anistar, Animaunt.
+  online_providers:
+    name: Онлайн-провайдеры (фильмы/сериалы)
+    description: Провайдеры, которые в апстриме выключены по умолчанию, но работают без аккаунта. Пустая строка — ничего дополнительно не включать. Mirage, Spectre, Videoseed и ENG-источники используют встроенный браузер Lampac.
   enable_hentasis:
     name: Включить Hentasis (18+)
-    description: Источник hentasis1.top в разделе 18+ (SISI). По умолчанию выключен.
+    description: Источник hentasis1.top в разделе 18+ (SISI). Включён по умолчанию.
   enable_monitor:
     name: Мониторинг источников
     description: Периодически проверяет доступность Senku, AniStar, AniMaunt, Hentasis, плеера OpenNI и Kodik. Статус — http://IP:9118/animemon, JSON — /animemon/status.
