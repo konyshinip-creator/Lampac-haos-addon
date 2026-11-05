@@ -1,12 +1,13 @@
 name: "Lampac"
-version: "1.1.0"
+version: "2026.11.05"
 slug: "lampac"
 description: >-
-  Lampac Next Generation — backend-сервер для Lampa. TorrServer, JacRed, Sync
-  и TimeCode включены по умолчанию (как в апстриме); дополнительно
-  предвключены аниме-провайдеры AniLiberty, AniLibria, Animevost, AnimeON,
-  AniMedia, MoonAnime, Mikai, AnimeLib, AnimeGo, Kodik. Свои модули: Senku,
-  AniStar, AniMaunt, Hentasis (18+, выключен) и монитор доступности источников.
+  Lampac Next Generation — backend-сервер для Lampa. По умолчанию включено
+  всё, что работает без дополнительной настройки: базовые модули (TorrServer,
+  JacRed, Sync, TimeCode, DLNA, Catalog, Tracks, WebLog, ForkPlayerXML,
+  MsxNative, Potok), админка /adminpanel/, все бесплатные онлайн- и
+  аниме-провайдеры, свои модули Senku, AniStar, AniMaunt, Hentasis (18+) и
+  монитор доступности источников.
 url: "https://github.com/lampac-nextgen/lampac"
 arch:
   - amd64
@@ -33,12 +34,34 @@ options:
   root_password: ""
   port: 9118
   timezone: "Europe/Kiev"
+  # --- базовые модули, включены по умолчанию в апстриме ---
   enable_torrserver: true
   enable_jacred: true
   enable_sync: true
   enable_timecode: true
-  anime_providers: "AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib,AnimeGo,Kodik,Senku,Anistar,Animaunt"
-  enable_hentasis: false
+  enable_dlna: true
+  # --- выключены в апстриме, но работают без настройки — включаем ---
+  enable_catalog: true
+  enable_tracks: true
+  enable_weblog: true
+  enable_forkplayerxml: true
+  enable_msxnative: true
+  enable_potok: true
+  # --- требуют настройки или ресурсов — по умолчанию выключены (см. DOCS) ---
+  enable_transcoding: false
+  enable_cachemedia: false
+  enable_proxylimiter: false
+  enable_telegramauth: false
+  enable_telegramauthbot: false
+  enable_seriesnotify: false
+  enable_qrauth: false
+  # --- встроенная админка Lampac (/adminpanel/), защищена root_password ---
+  enable_admin_panel: true
+  # --- онлайн-провайдеры (см. DOCS.md) ---
+  anime_providers: "AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib,AnimeGo,Kodik,AniDub,AiLiberty,Animebesst,Dreamerscast,Senku,Anistar,Animaunt"
+  online_providers: "FanCDN,FlixCDN,Videoseed,Mirage,Spectre,Kinoukr,Autoembed,Playembed,Rgshows,Twoembed"
+  # --- свои модули этого репозитория ---
+  enable_hentasis: true
   enable_monitor: true
   monitor_interval: 10
   monitor_webhook: ""
@@ -52,7 +75,23 @@ schema:
   enable_jacred: bool
   enable_sync: bool
   enable_timecode: bool
+  enable_dlna: bool
+  enable_catalog: bool
+  enable_tracks: bool
+  enable_weblog: bool
+  enable_forkplayerxml: bool
+  enable_msxnative: bool
+  enable_potok: bool
+  enable_transcoding: bool
+  enable_cachemedia: bool
+  enable_proxylimiter: bool
+  enable_telegramauth: bool
+  enable_telegramauthbot: bool
+  enable_seriesnotify: bool
+  enable_qrauth: bool
+  enable_admin_panel: bool
   anime_providers: str
+  online_providers: str
   enable_hentasis: bool
   enable_monitor: bool
   monitor_interval: int(1,1440)
