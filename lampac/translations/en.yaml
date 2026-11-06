@@ -74,9 +74,15 @@ configuration:
   enable_hentasis:
     name: Enable Hentasis (18+)
     description: hentasis1.top source in the 18+ (SISI) section. On by default.
+  enable_hentaiukr:
+    name: Enable HentaiUkr (18+)
+    description: hentaiukr.com source in the 18+ (SISI) section. On by default. Titles tagged as school-themed and titles without tags are not shown.
+  xhamster_host:
+    name: Xhamster mirror
+    description: Site address for the built-in Xhamster module. Empty keeps the init.conf setting.
   enable_monitor:
     name: Source monitor
-    description: Periodically checks Senku, AniStar, AniMaunt, Hentasis, the OpenNI player and Kodik. Status at http://IP:9118/animemon, JSON at /animemon/status.
+    description: Periodically checks Senku, AniStar, AniMaunt, AnimeFox, AniTokyo, Hentasis, HentaiUkr, the OpenNI player and Kodik. Status at http://IP:9118/animemon, JSON at /animemon/status.
   monitor_interval:
     name: Check interval (min)
     description: How often to check the sources.

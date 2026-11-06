@@ -28,11 +28,12 @@ amd64/arm64) с добавленными модулями из папки `mods/
 - **Админка** Lampac на `/adminpanel/` (пароль — `root_password`)
 - **Аниме-провайдеры**: AniLiberty, AniLibria, Animevost, AnimeON, AniMedia,
   MoonAnime, Mikai, AnimeLib, AnimeGo, Kodik, AniDub, AiLiberty, Animebesst,
-  Dreamerscast + свои Senku, Anistar, Animaunt
+  Dreamerscast + свои Senku, Anistar, Animaunt, AnimeFox, AniTokyo
 - **Онлайн-провайдеры**, выключенные в апстриме: FanCDN, FlixCDN, Videoseed,
   Mirage, Spectre, Kinoukr, Autoembed, Playembed, Rgshows, Twoembed
   (остальные бесплатные источники апстрима и так включены)
-- **Hentasis** (18+, раздел SISI) и **монитор доступности** источников
+- **Hentasis** и **HentaiUkr** (18+, раздел SISI), зеркало `ua.xhamster2.com` для
+  встроенного Xhamster и **монитор доступности** источников
 - Порт **9118**, часовой пояс **Europe/Kiev**
 - Пароль администратора генерируется случайно при первом старте и один раз
   выводится в лог аддона, если не задан свой через `root_password`
@@ -103,6 +104,8 @@ TimeCode и синхронизация уже подключены.
 | `anime_providers` | см. ниже | Аниме-провайдеры через запятую |
 | `online_providers` | см. ниже | Онлайн-провайдеры, выключенные в апстриме; пусто — не включать |
 | `enable_hentasis` | `true` | Источник Hentasis (18+) |
+| `enable_hentaiukr` | `true` | Источник HentaiUkr (18+) |
+| `xhamster_host` | `https://ua.xhamster2.com` | Зеркало встроенного Xhamster; пусто — не менять `init.conf` |
 | `enable_monitor` | `true` | Мониторинг доступности источников (`/animemon`) |
 | `monitor_interval` | `10` | Интервал проверок, минуты |
 | `monitor_webhook` | *(пусто)* | URL для POST при смене статуса источника |
@@ -133,7 +136,7 @@ TimeCode и синхронизация уже подключены.
 `online_providers` и не выключает остальные. Значения по умолчанию:
 
 - `anime_providers`:
-  `AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib,AnimeGo,Kodik,AniDub,AiLiberty,Animebesst,Dreamerscast,Senku,Anistar,Animaunt`
+  `AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib,AnimeGo,Kodik,AniDub,AiLiberty,Animebesst,Dreamerscast,Senku,Anistar,Animaunt,AnimeFox,AniTokyo`
 - `online_providers`:
   `FanCDN,FlixCDN,Videoseed,Mirage,Spectre,Kinoukr,Autoembed,Playembed,Rgshows,Twoembed`
 
@@ -155,7 +158,10 @@ Mirage, Spectre, Videoseed и ENG-источники (Autoembed, Playembed, Twoe
 | `Senku` | senku.one: озвучки Kodik и собственные mp4 до 1080p и выше |
 | `Anistar` | anistar.org: плеер AniStar (озвучка, многоголосая, субтитры), поток через прокси Lampac |
 | `Animaunt` | animaunt.org: плеер OpenNI, mp4 до 1080p |
+| `AnimeFox` | animefox.org: озвучки и серии плеера Kodik, поток через встроенный модуль Kodik |
+| `AniTokyo` | anitokyo.tv: озвучки и серии плеера Kodik, поток через встроенный модуль Kodik |
 | `Hentasis` | hentasis1.top в разделе 18+; опция `enable_hentasis` |
+| `HentaiUkr` | hentaiukr.com в разделе 18+; опция `enable_hentaiukr` |
 | `AnimeMonitor` | мониторинг доступности источников |
 
 **Мониторинг.** Страница `http://<IP>:9118/animemon`, JSON для

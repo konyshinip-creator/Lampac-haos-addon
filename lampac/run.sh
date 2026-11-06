@@ -27,13 +27,15 @@ EXTRA_JSON=$(json_get '.extra_init_json // ""')
 ONLINE_PROVIDERS=$(opt_get online_providers __default__)
 ENABLE_ADMIN_PANEL=$(opt_get enable_admin_panel true)
 ENABLE_HENTASIS=$(opt_get enable_hentasis true)
+ENABLE_HENTAIUKR=$(opt_get enable_hentaiukr true)
+XHAMSTER_HOST=$(opt_get xhamster_host "https://ua.xhamster2.com")
 ENABLE_MONITOR=$(opt_get enable_monitor true)
 MONITOR_INTERVAL=$(opt_get monitor_interval 10)
 MONITOR_WEBHOOK=$(opt_get monitor_webhook "")
 
 [ -z "$PORT" ] && PORT=9118
 [ -z "$TIMEZONE" ] && TIMEZONE="Europe/Kiev"
-[ -z "$ANIME_PROVIDERS" ] && ANIME_PROVIDERS="AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib,AnimeGo,Kodik,AniDub,AiLiberty,Animebesst,Dreamerscast,Senku,Anistar,Animaunt"
+[ -z "$ANIME_PROVIDERS" ] && ANIME_PROVIDERS="AniLiberty,AniLibria,Animevost,AnimeON,AniMedia,MoonAnime,Mikai,AnimeLib,AnimeGo,Kodik,AniDub,AiLiberty,Animebesst,Dreamerscast,Senku,Anistar,Animaunt,AnimeFox,AniTokyo"
 # online_providers: пустая строка в опциях = ничего дополнительно не включать
 [ "$ONLINE_PROVIDERS" = "__default__" ] && ONLINE_PROVIDERS="FanCDN,FlixCDN,Videoseed,Mirage,Spectre,Kinoukr,Autoembed,Playembed,Rgshows,Twoembed"
 [ -z "$MONITOR_INTERVAL" ] && MONITOR_INTERVAL=10
@@ -129,14 +131,19 @@ for w in "${WANTED[@]}"; do
 done
 
 # --- Модули из папки mods/ этого репозитория -------------------------------
-#     Hentasis (18+, раздел SISI) — опция enable_hentasis; монитор доступности
+#     Hentasis и HentaiUkr (18+, раздел SISI) — опции enable_hentasis и
+#     enable_hentaiukr; зеркало встроенного Xhamster — xhamster_host; монитор доступности
 #     источников — enable_monitor / monitor_interval / monitor_webhook.
 tmp="$(mktemp)"
 jq --argjson hentasis "$( [ "$ENABLE_HENTASIS" = "false" ] && echo false || echo true )" \
+   --argjson hentaiukr "$( [ "$ENABLE_HENTAIUKR" = "false" ] && echo false || echo true )" \
+   --arg xhamster "$XHAMSTER_HOST" \
    --argjson monitor "$( [ "$ENABLE_MONITOR" = "false" ] && echo false || echo true )" \
    --argjson interval "$MONITOR_INTERVAL" \
    --arg webhook "$MONITOR_WEBHOOK" \
    '.Hentasis = ((.Hentasis // {}) + {enable: $hentasis})
+    | .HentaiUkr = ((.HentaiUkr // {}) + {enable: $hentaiukr})
+    | if $xhamster == "" then . else .Xhamster = ((.Xhamster // {}) + {host: $xhamster}) end
     | .AnimeMonitor = ((.AnimeMonitor // {}) + {enable: $monitor, interval: $interval})
     | if $webhook == "" then .AnimeMonitor |= del(.webhook) else .AnimeMonitor.webhook = $webhook end' \
    "$CONF_DIR/init.conf" > "$tmp" && mv "$tmp" "$CONF_DIR/init.conf"

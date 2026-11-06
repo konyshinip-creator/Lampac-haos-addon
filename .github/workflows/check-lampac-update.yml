@@ -8,7 +8,8 @@ name: Build and version Lampac add-on
 # Когда запускается:
 #   - каждый день в 05:00 UTC — если вышел новый образ Lampac на GHCR;
 #   - при push в main с изменениями в lampac/ — после правок аддона/модулей;
-#   - вручную (Actions → Run workflow), с опцией принудительного бампа.
+#   - вручную (Actions → Run workflow), с опцией принудительного бампа;
+#   - в pull request с изменениями в lampac/ — только сборка и smoke test, без бампа.
 #
 # Версия бампается только если тестовая сборка образа прошла и Lampac
 # поднялся вместе с модулями из lampac/mods.
@@ -17,6 +18,11 @@ on:
   schedule:
     - cron: "0 5 * * *"
   push:
+    branches: [main]
+    paths:
+      - "lampac/**"
+      - ".github/workflows/check-lampac-update.yml"
+  pull_request:
     branches: [main]
     paths:
       - "lampac/**"
@@ -57,7 +63,7 @@ jobs:
         run: |
           LAST=""
           [ -f .github/last-digest.txt ] && LAST="$(cat .github/last-digest.txt)"
-          if [ "${{ github.event_name }}" = "push" ] || [ "${{ inputs.force_bump }}" = "true" ]; then
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ inputs.force_bump }}" = "true" ]; then
             echo "bump=true" >> "$GITHUB_OUTPUT"
           elif [ "$LAST" != "${{ steps.digest.outputs.digest }}" ]; then
             echo "bump=true" >> "$GITHUB_OUTPUT"
@@ -95,21 +101,21 @@ jobs:
           docker logs lampac 2>&1 | grep -q "Configure complete" || { echo "::error::Lampac не закончил загрузку модулей"; docker logs lampac 2>&1 | tail -200; exit 1; }
           sleep 5
           FAIL=0
-          for m in Senku Anistar Animaunt Hentasis AnimeMonitor; do
+          for m in Senku Anistar Animaunt AnimeFox AniTokyo Hentasis HentaiUkr AnimeMonitor; do
             if docker logs lampac 2>&1 | grep -qE "^loaded module: $m[[:space:]]*$"; then
               echo "module $m: loaded"
             else
               echo "::error::module $m не загрузился"; FAIL=1
             fi
           done
-          for r in lite/senku lite/anistar lite/animaunt hentasis animemon/status; do
+          for r in lite/senku lite/anistar lite/animaunt lite/animefox lite/anitokyo hentasis hentaiukr animemon/status; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "http://127.0.0.1:9118/$r" || true)
             echo "/$r -> $code"
             # 503 — штатный ответ модуля на запрос без title (OnError), роут жив
             case "$code" in 404|000) FAIL=1 ;; esac
           done
           if docker logs lampac 2>&1 | grep -E "error CS[0-9]+"; then FAIL=1; fi
-          docker exec lampac cat /config/init.conf | jq -c '{SkipModules: .BaseModule.SkipModules, Senku, Anistar, Animaunt, Hentasis, AnimeMonitor}'
+          docker exec lampac cat /config/init.conf | jq -c '{SkipModules: .BaseModule.SkipModules, Senku, Anistar, Animaunt, AnimeFox, AniTokyo, Hentasis, HentaiUkr, Xhamster, AnimeMonitor}'
           if [ "$FAIL" = "1" ]; then
             echo "::error::Модули не загрузились, лог контейнера ниже"
             docker logs lampac 2>&1 | tail -200
@@ -122,7 +128,7 @@ jobs:
 
   bump:
     needs: build
-    if: needs.build.outputs.bump == 'true'
+    if: needs.build.outputs.bump == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
