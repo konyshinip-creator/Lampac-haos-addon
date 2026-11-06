@@ -67,16 +67,22 @@ configuration:
     description: Выключен по умолчанию — вход по QR через Telegram-бота, требует настройки.
   anime_providers:
     name: Аниме-провайдеры
-    description: Аниме-провайдеры через запятую (имена как в init.conf), которые нужно включить. По умолчанию — все бесплатные плюс Senku, Anistar, Animaunt.
+    description: Аниме-провайдеры через запятую (имена как в init.conf), которые нужно включить. По умолчанию — все бесплатные плюс Senku, Anistar, Animaunt, AnimeFox, AniTokyo.
   online_providers:
     name: Онлайн-провайдеры (фильмы/сериалы)
     description: Провайдеры, которые в апстриме выключены по умолчанию, но работают без аккаунта. Пустая строка — ничего дополнительно не включать. Mirage, Spectre, Videoseed и ENG-источники используют встроенный браузер Lampac.
   enable_hentasis:
     name: Включить Hentasis (18+)
     description: Источник hentasis1.top в разделе 18+ (SISI). Включён по умолчанию.
+  enable_hentaiukr:
+    name: Включить HentaiUkr (18+)
+    description: Источник hentaiukr.com в разделе 18+ (SISI). Включён по умолчанию. Тайтлы с тегами «Школа» и «Школярки» и тайтлы без тегов не показываются.
+  xhamster_host:
+    name: Зеркало Xhamster
+    description: Адрес сайта для встроенного модуля Xhamster. Пустая строка — не менять настройку init.conf.
   enable_monitor:
     name: Мониторинг источников
-    description: Периодически проверяет доступность Senku, AniStar, AniMaunt, Hentasis, плеера OpenNI и Kodik. Статус — http://IP:9118/animemon, JSON — /animemon/status.
+    description: Периодически проверяет доступность Senku, AniStar, AniMaunt, AnimeFox, AniTokyo, Hentasis, HentaiUkr, плеера OpenNI и Kodik. Статус — http://IP:9118/animemon, JSON — /animemon/status.
   monitor_interval:
     name: Интервал проверки (мин)
     description: Как часто проверять источники.

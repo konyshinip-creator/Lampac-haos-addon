@@ -17,7 +17,7 @@
 - Настройка порта, часового пояса и пароля администратора через опции аддона
 - **Всё, что работает без настройки, включено сразу**: базовые модули, все
   бесплатные онлайн- и аниме-провайдеры, встроенная админка `/adminpanel/`
-- Собственные модули: **Senku**, **AniStar**, **AniMaunt**, **Hentasis** (18+) и
+- Собственные модули: **Senku**, **AniStar**, **AniMaunt**, **AnimeFox**, **AniTokyo**, **Hentasis** и **HentaiUkr** (18+) и
   монитор доступности источников (`/animemon`) — папка [`lampac/mods/`](lampac/mods/)
 - Переключатели для 17 базовых модулей Lampac (TorrServer, JacRed, Sync, TimeCode,
   DLNA, Catalog, Tracks, Transcoding, WebLog, CacheMedia, ProxyLimiter,
@@ -65,7 +65,7 @@
 | Плагин | Адрес |
 |---|---|
 | Онлайн (все онлайн- и аниме-провайдеры, Senku, AniStar, AniMaunt) | `http://<IP хоста>:9118/online.js` |
-| 18+ (в том числе Hentasis) | `http://<IP хоста>:9118/sisi.js` |
+| 18+ (в том числе Hentasis и HentaiUkr) | `http://<IP хоста>:9118/sisi.js` |
 
 Перезапустите Lampa, откройте карточку и нажмите **Онлайн** — включённые
 источники будут в списке. Либо просто откройте `http://<IP хоста>:9118/` —
@@ -88,7 +88,10 @@ Lampac отдаёт сборку Lampa, где эти плагины уже по
     - lampac/mods/Senku
     - lampac/mods/Anistar
     - lampac/mods/Animaunt
+    - lampac/mods/AnimeFox
+    - lampac/mods/AniTokyo
     - lampac/mods/Hentasis
+    - lampac/mods/HentaiUkr
     - lampac/mods/AnimeMonitor
 ```
 
@@ -99,7 +102,10 @@ Lampac отдаёт сборку Lampa, где эти плагины уже по
   "Senku": { "enable": true },
   "Anistar": { "enable": true },
   "Animaunt": { "enable": true },
+  "AnimeFox": { "enable": true },
+  "AniTokyo": { "enable": true },
   "Hentasis": { "enable": true },
+  "HentaiUkr": { "enable": true },
   "AnimeMonitor": { "enable": true }
 }
 ```
