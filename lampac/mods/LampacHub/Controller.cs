@@ -768,6 +768,58 @@ public class HubAdminController : BaseController
             : Reply(new { error = "Импорт уже идёт" }, 409);
     }
 
+    /// <summary>Код входа AniLiberty: его подтверждают на сайте, пароль на сервер не попадает</summary>
+    [HttpPost]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/import/aniliberty/otp")]
+    public async Task<ActionResult> AniLibertyOtp()
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        try
+        {
+            var otp = await AniLibertySource.RequestOtp();
+            return Reply(new { code = otp.code, remaining = (int)(otp.expires - DateTime.UtcNow).TotalSeconds });
+        }
+        catch (Exception ex) when (ex is InvalidOperationException || ex is System.Net.Http.HttpRequestException || ex is TaskCanceledException)
+        {
+            return Reply(new { error = ex is InvalidOperationException ? ex.Message : "AniLiberty недоступен" }, 502);
+        }
+    }
+
+    /// <summary>Импорт AniLiberty в фоне: по подтверждённому коду или по логину и паролю (не сохраняются)</summary>
+    [HttpPost]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/import/aniliberty")]
+    public ActionResult ImportAniLiberty(string profile_id, string login, string password, bool otp = false)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        var profile = AdminProfile(profile_id);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        if (otp && AniLibertySource.Pending == null)
+            return Reply(new { error = "Сначала получите код входа AniLiberty" }, 400);
+
+        if (!otp && (string.IsNullOrWhiteSpace(login) || string.IsNullOrEmpty(password)))
+            return Reply(new { error = "Укажите логин и пароль AniLiberty или войдите по коду" }, 400);
+
+        string l = login, pw = password;
+        bool started = Importer.Start("aniliberty", profile, host, state => AniLibertySource.Fetch(l, pw, otp, state));
+        return started
+            ? Reply(new { status = "ok", state = Importer.State })
+            : Reply(new { error = "Импорт уже идёт" }, 409);
+    }
+
     /// <summary>Резервная копия Lampa / CUB (JSON) — карточки уже с id TMDB, вливаются сразу</summary>
     [HttpPost]
     [RequestSizeLimit(50_000_000)]

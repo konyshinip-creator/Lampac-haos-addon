@@ -130,6 +130,20 @@
       <button id="iYummyGo">Импортировать</button>
     </div>
     <p class="muted">Публичные списки читаются без входа. Если списки закрыты, откройте их в настройках приватности Yummy или вставьте токен входа. Токен нужен только на время импорта и нигде не сохраняется. Пароль от Yummy не нужен.</p>
+    <h2 style="margin-top:14px">AniLiberty</h2>
+    <div class="row">
+      <button id="iAlOtp">Войти по коду</button>
+      <span id="iAlCode" class="muted"></span>
+    </div>
+    <p class="muted">Нажмите «Войти по коду», подтвердите показанный код на сайте AniLiberty в своём аккаунте (вход по коду для устройства), затем нажмите «Импортировать». Пароль при этом сюда не вводится.</p>
+    <div class="row">
+      <input id="iAlLogin" placeholder="…или логин / e-mail AniLiberty" autocomplete="off" style="flex:1;min-width:12em">
+      <input id="iAlPass" type="password" placeholder="Пароль" autocomplete="new-password" style="flex:1;min-width:10em">
+      <button id="iAlGo">Импортировать</button>
+    </div>
+    <p class="muted">Импортируются коллекции (Смотрю, Запланировано → Планирую, Просмотрено, Отложено, Брошено) и Избранное. Логин, пароль и токен нужны только на время импорта и нигде не сохраняются.</p>
+    <h2 style="margin-top:14px">Anihub</h2>
+    <p class="muted">У Anihub (anihub.in.ua) нет открытого API и экспорта списков, поэтому прямой импорт невозможен. Если списки есть на Shikimori или MAL, их можно перенести через Yummy или резервную копию.</p>
     <h2 style="margin-top:14px">Резервная копия Lampa / CUB</h2>
     <div class="row">
       <button class="ghost" id="iLampa">Загрузить файл…</button>
@@ -648,7 +662,7 @@
     var s = r && r.state;
     if (!s || !s.started) { $('iState').textContent = ''; return; }
     var lines = [];
-    lines.push((s.running ? '⏳ ' : (s.error ? '⚠️ ' : '✅ ')) + (s.source === 'yummy' ? 'Yummy' : s.source) + ' → «' + (findProfile(s.profile_id).name || s.profile_id) + '»: ' + (s.stage || ''));
+    lines.push((s.running ? '⏳ ' : (s.error ? '⚠️ ' : '✅ ')) + ({ yummy: 'Yummy', aniliberty: 'AniLiberty' }[s.source] || s.source) + ' → «' + (findProfile(s.profile_id).name || s.profile_id) + '»: ' + (s.stage || ''));
     if (s.total) lines.push('Обработано ' + s.processed + ' из ' + s.total + ' · по id ' + s.by_ids + ' · по названию ' + s.by_search + ' · в очередь ' + s.queued);
     if (!s.running && !s.error && s.finished) lines.push('Записано карточек: ' + s.imported + (s.merged ? ' (сезоны объединены: ' + s.merged + ')' : ''));
     if (s.error) lines.push('Ошибка: ' + s.error);
@@ -711,6 +725,24 @@
     if (!confirm('Импортировать списки Yummy «' + user + '» в профиль «' + name + '»?')) return;
     api('/hub/api/import/yummy', { profile_id: impProfile(), user: user, token: $('iYummyToken').value.trim() })
       .then(function () { $('iYummyToken').value = ''; imp.wasRunning = true; pollImport(); })
+      .catch(function (e) { toast(e.message); });
+  };
+
+  var alOtp = false;
+  $('iAlOtp').onclick = function () {
+    api('/hub/api/import/aniliberty/otp', {}).then(function (r) {
+      alOtp = true;
+      $('iAlCode').innerHTML = 'Код: <b style="font-size:1.3em;letter-spacing:.15em">' + esc(r.code) + '</b> — подтвердите на сайте AniLiberty за ' + Math.round((r.remaining || 0) / 60) + ' мин и нажмите «Импортировать»';
+    }).catch(function (e) { toast(e.message); });
+  };
+  $('iAlGo').onclick = function () {
+    var login = $('iAlLogin').value.trim(), pass = $('iAlPass').value;
+    var useOtp = !login && alOtp;
+    if (!useOtp && (!login || !pass)) { toast('Войдите по коду или укажите логин и пароль AniLiberty'); return; }
+    var name = findProfile(impProfile()).name || impProfile();
+    if (!confirm('Импортировать списки AniLiberty в профиль «' + name + '»?')) return;
+    api('/hub/api/import/aniliberty', useOtp ? { profile_id: impProfile(), otp: true } : { profile_id: impProfile(), login: login, password: pass })
+      .then(function () { $('iAlPass').value = ''; alOtp = false; $('iAlCode').textContent = ''; imp.wasRunning = true; pollImport(); })
       .catch(function (e) { toast(e.message); });
   };
 
