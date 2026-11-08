@@ -669,6 +669,7 @@
     var base = lists.items.filter(baseFilter);
     var list = base.filter(function (i) {
       if (dup) return !!dup[i.id];
+      if (f === 'none') return !statusOf(i);
       return !f || i.categories.indexOf(f) >= 0;
     });
     var sort = $('lSort').value;
@@ -714,7 +715,7 @@
   function renderFilterOptions() {
     // числа на фильтре считаем по текущей вкладке и остальным фильтрам
     var save = lists.f, f = lists.cat, dup = f === 'dup' ? duplicates() : null;
-    function inTab(i) { return dup ? !!dup[i.id] : !f || i.categories.indexOf(f) >= 0; }
+    function inTab(i) { return dup ? !!dup[i.id] : f === 'none' ? !statusOf(i) : !f || i.categories.indexOf(f) >= 0; }
     function countBy(group, fn) {
       lists.f = {}; Object.keys(save).forEach(function (k) { lists.f[k] = k === group ? '' : save[k]; });
       var c = {};
@@ -769,10 +770,14 @@
     v.base.forEach(function (i) { i.categories.forEach(function (c) { counts[c] = (counts[c] || 0) + 1; }); });
 
     var tabs = [['', 'Все', v.base.length]].concat(CATS.filter(function (c) { return counts[c[0]] || STATUSES.indexOf(c[0]) >= 0 || c[0] === 'like'; }).map(function (c) { return [c[0], c[1], counts[c[0]] || 0]; }));
+    var none = v.base.filter(function (i) { return !statusOf(i); }).length;
+    var at = tabs.length;
+    tabs.forEach(function (t, n) { if (t[0] === 'rewatch') at = n + 1; });
+    tabs.splice(at, 0, ['none', 'Без статуса', none]);
     if (dupCount) tabs.push(['dup', 'Возможные дубли', dupCount]);
     $('lTabs').innerHTML = tabs.map(function (t) {
       var color = CAT_COLOR[t[0]] ? ' style="--c:' + CAT_COLOR[t[0]] + '"' : '';
-      return '<button class="pill' + (lists.cat === t[0] ? ' on' : '') + '" data-ltab="' + t[0] + '"' + color + '>' + (t[0] && t[0] !== 'dup' ? '<span class="st"></span>' : '') + esc(t[1]) + '<b>' + t[2] + '</b></button>';
+      return '<button class="pill' + (lists.cat === t[0] ? ' on' : '') + '" data-ltab="' + t[0] + '"' + color + '>' + (t[0] && t[0] !== 'dup' && t[0] !== 'none' ? '<span class="st"></span>' : '') + esc(t[1]) + '<b>' + t[2] + '</b></button>';
     }).join('');
 
     $('lCount').textContent = v.list.length === lists.items.length ? 'Всего ' + lists.items.length : 'Найдено ' + v.list.length + ' из ' + lists.items.length;
