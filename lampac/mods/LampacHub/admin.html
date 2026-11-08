@@ -30,6 +30,15 @@
   .pending b{font-size:22px;letter-spacing:4px;font-variant-numeric:tabular-nums}
   #toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:#2a2f3a;padding:10px 16px;border-radius:8px;display:none;max-width:calc(100% - 32px)}
   .scroll{overflow-x:auto}
+  .avatar.big{width:44px;height:44px;font-size:24px;cursor:pointer;border:2px solid transparent}
+  .avatar.big:hover{border-color:var(--accent)}
+  #picker{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
+  #picker .box{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;width:100%;max-width:520px;max-height:90vh;overflow:auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:10px;margin:12px 0}
+  .grid button{padding:0;background:transparent;border:2px solid transparent;border-radius:50%;aspect-ratio:1;overflow:hidden}
+  .grid button:hover,.grid button:focus{border-color:var(--accent)}
+  .grid img{width:100%;height:100%;display:block}
+  .age{min-width:5.5em}
   @media (max-width:640px){.hide-sm{display:none}}
 </style>
 </head>
@@ -54,13 +63,25 @@
 
   <section>
     <h2>Профили</h2>
-    <p class="muted">У каждого профиля свои закладки, история и тайм-коды. «Основной» — общая область, где лежат данные, накопленные до LampacHub.</p>
+    <p class="muted">У каждого профиля свои закладки, история и тайм-коды. «Основной» — общая область, где лежат данные, накопленные до LampacHub. Нажмите на аватар, чтобы выбрать готовый или загрузить с ПК.</p>
+    <p class="muted">Детский профиль: в Lampa скрыта «Клубничка», карточки с возрастным рейтингом выше лимита не открываются, из списков убираются тайтлы 18+, ужасы и триллеры (при лимите ниже 16+).</p>
     <div class="scroll"><table id="profiles"></table></div>
     <div class="row" style="margin-top:12px">
+      <span class="avatar big" id="pAvatarView" title="Выбрать аватар">+</span>
       <input id="pName" placeholder="Имя нового профиля" maxlength="40">
-      <input id="pAvatar" placeholder="Аватар: эмодзи или URL" style="width:12em">
       <label class="row muted"><input type="checkbox" id="pChild"> детский</label>
+      <select id="pAge" class="age" title="Возрастной лимит детского профиля"></select>
       <button id="pAdd">Добавить</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>PIN детского профиля</h2>
+    <p class="muted">Lampa спросит PIN, когда с детского профиля переключаются на другой или выходят из LampacHub. <span id="pinState"></span></p>
+    <div class="row">
+      <input id="pin" type="password" inputmode="numeric" maxlength="8" placeholder="4–8 цифр" autocomplete="new-password">
+      <button id="pinSave">Сохранить PIN</button>
+      <button class="ghost" id="pinClear">Убрать PIN</button>
     </div>
   </section>
 
@@ -70,6 +91,22 @@
     <p class="muted">Отзыв удаляет вход устройства: при следующем запуске Lampa оно выйдет из LampacHub и вернётся к экрану входа.</p>
   </section>
 </main>
+<div id="picker"><div class="box">
+  <h2>Аватар профиля</h2>
+  <div class="grid" id="presetGrid"></div>
+  <div class="row">
+    <button class="ghost" id="uploadBtn">Загрузить с ПК…</button>
+    <input type="file" id="uploadFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <input id="emojiInput" placeholder="или эмодзи / URL картинки" style="flex:1">
+    <button class="ghost" id="emojiBtn">Применить</button>
+  </div>
+  <div class="row" style="margin-top:12px;justify-content:space-between">
+    <button class="ghost" id="clearBtn">Без аватара</button>
+    <button class="ghost" id="closeBtn">Закрыть</button>
+  </div>
+</div></div>
 <div id="toast"></div>
 <script>
 (function () {
@@ -87,10 +124,17 @@
     if (d < 86400) return Math.floor(d / 3600) + ' ч назад';
     return new Date(sec * 1000).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
-  function avatar(p) {
+  function isImage(a) { return /^https?:\/\//i.test(a) || /^\/hub\/avatars?\//.test(a); }
+  var AGES = [0, 6, 12, 16];
+  function ageOptions(selected) {
+    return AGES.map(function (a) { return '<option value="' + a + '"' + (a === selected ? ' selected' : '') + '>' + a + '+</option>'; }).join('');
+  }
+  function avatar(p, big) {
     var a = p && p.avatar || '';
-    if (/^https?:\/\//i.test(a)) return '<span class="avatar"><img src="' + esc(a) + '" alt=""></span>';
-    return '<span class="avatar">' + esc(a || (p && p.name ? p.name.charAt(0).toUpperCase() : '?')) + '</span>';
+    var cls = big ? 'avatar big' : 'avatar';
+    var attr = big && p && p.id != null ? ' data-avatar="' + esc(p.id) + '" title="Сменить аватар"' : '';
+    if (isImage(a)) return '<span class="' + cls + '"' + attr + '><img src="' + esc(a) + '" alt=""></span>';
+    return '<span class="' + cls + '"' + attr + '>' + esc(a || (p && p.name ? p.name.charAt(0).toUpperCase() : '?')) + '</span>';
   }
   function profileName(id) {
     var p = (state && state.profiles || []).filter(function (x) { return x.id === id; })[0];
@@ -124,6 +168,7 @@
 
   function render() {
     $('acc').textContent = 'Аккаунт: ' + state.account.name;
+    $('pinState').textContent = state.pin ? 'Сейчас PIN задан.' : 'Сейчас PIN не задан — переключение свободное.';
     var keep = $('codeProfile').value;
     $('codeProfile').innerHTML = profileOptions(keep || '0');
 
@@ -134,12 +179,12 @@
         '<button data-confirm="' + esc(p.code) + '">Подтвердить</button></div>';
     }).join('') || '<span class="muted">Сейчас никто не ждёт подтверждения.</span>';
 
-    $('profiles').innerHTML = '<tr><th></th><th>Имя</th><th>Аватар</th><th>Детский</th><th class="hide-sm">ID</th><th></th></tr>' +
+    $('profiles').innerHTML = '<tr><th>Аватар</th><th>Имя</th><th>Детский</th><th class="hide-sm">ID</th><th></th></tr>' +
       state.profiles.map(function (p) {
-        return '<tr data-id="' + esc(p.id) + '"><td>' + avatar(p) + '</td>' +
+        return '<tr data-id="' + esc(p.id) + '"><td>' + avatar(p, true) + '</td>' +
           '<td><input data-f="name" value="' + esc(p.name) + '" maxlength="40"></td>' +
-          '<td><input data-f="avatar" value="' + esc(p.avatar) + '" style="width:9em"></td>' +
-          '<td><input type="checkbox" data-f="child"' + (p.child ? ' checked' : '') + '></td>' +
+          '<td class="row"><input type="checkbox" data-f="child"' + (p.child ? ' checked' : '') + '>' +
+          '<select data-f="age" class="age"' + (p.child ? '' : ' disabled') + '>' + ageOptions(p.age_limit) + '</select></td>' +
           '<td class="hide-sm muted">' + esc(p.id) + '</td>' +
           '<td class="row"><button class="ghost" data-save="' + esc(p.id) + '">Сохранить</button>' +
           (p.id === '0' ? '' : '<button class="danger" data-del="' + esc(p.id) + '">Удалить</button>') + '</td></tr>';
@@ -172,13 +217,22 @@
   $('pAdd').onclick = function () {
     var name = $('pName').value.trim();
     if (!name) { toast('Укажите имя профиля'); return; }
-    api('/hub/api/profile/save', { name: name, avatar: $('pAvatar').value.trim(), child: $('pChild').checked })
-      .then(function () { $('pName').value = ''; $('pAvatar').value = ''; $('pChild').checked = false; toast('Профиль создан'); return load(); })
+    var choice = newAvatar;
+    api('/hub/api/profile/save', { name: name, avatar: choice && choice.value || '', child: $('pChild').checked, age_limit: $('pAge').value })
+      .then(function (r) {
+        if (choice && choice.data) return api('/hub/api/profile/avatar', { id: r.profile.id, data: choice.data });
+      })
+      .then(function () {
+        $('pName').value = ''; $('pChild').checked = false; newAvatar = null; showNewAvatar();
+        toast('Профиль создан'); return load();
+      })
       .catch(function (e) { toast(e.message); });
   };
 
   document.addEventListener('click', function (e) {
     var t = e.target, id;
+    var av = t.closest && t.closest('[data-avatar]');
+    if (av) { openPicker(av.getAttribute('data-avatar')); return; }
     if ((id = t.getAttribute('data-confirm'))) {
       var sel = document.querySelector('select[data-pp="' + id + '"]');
       confirmCode(id, sel ? sel.value : '0', '');
@@ -188,8 +242,9 @@
       api('/hub/api/profile/save', {
         id: id,
         name: tr.querySelector('[data-f=name]').value.trim(),
-        avatar: tr.querySelector('[data-f=avatar]').value.trim(),
-        child: tr.querySelector('[data-f=child]').checked
+        avatar: findProfile(id).avatar || '',
+        child: tr.querySelector('[data-f=child]').checked,
+        age_limit: tr.querySelector('[data-f=age]').value
       }).then(function () { toast('Сохранено'); return load(); }).catch(function (e) { toast(e.message); });
     }
     else if ((id = t.getAttribute('data-del'))) {
@@ -206,11 +261,107 @@
     }
   });
 
+  function findProfile(id) {
+    return (state.profiles || []).filter(function (x) { return x.id === id; })[0] || {};
+  }
+
+  // --- выбор аватара -------------------------------------------------------
+  var newAvatar = null;      // выбор для нового профиля: { value } или { data }
+  var pickerTarget = null;   // id профиля или null для нового
+
+  $('pAge').innerHTML = ageOptions(12);
+  $('pAge').disabled = true;
+  $('pChild').onchange = function () { $('pAge').disabled = !$('pChild').checked; };
+
+  function showNewAvatar() {
+    var v = $('pAvatarView');
+    var src = newAvatar && (newAvatar.data || (isImage(newAvatar.value) ? newAvatar.value : null));
+    if (src) v.innerHTML = '<img src="' + esc(src) + '" alt="">';
+    else v.textContent = newAvatar && newAvatar.value ? newAvatar.value : '+';
+  }
+
+  function openPicker(target) {
+    pickerTarget = target;
+    $('presetGrid').innerHTML = (state.presets || []).map(function (u) {
+      return '<button data-preset="' + esc(u) + '"><img src="' + esc(u) + '" alt=""></button>';
+    }).join('');
+    $('emojiInput').value = '';
+    $('picker').style.display = 'flex';
+  }
+  function closePicker() { $('picker').style.display = 'none'; }
+
+  /** Применить выбор: { value } — путь/эмодзи/URL, { data } — картинка с ПК (data URL) */
+  function applyAvatar(choice) {
+    closePicker();
+    if (pickerTarget === null) { newAvatar = choice; showNewAvatar(); return; }
+    var id = pickerTarget, p = findProfile(id);
+    var req = choice.data
+      ? api('/hub/api/profile/avatar', { id: id, data: choice.data })
+      : api('/hub/api/profile/save', { id: id, name: p.name, avatar: choice.value, child: p.child, age_limit: p.age_limit });
+    req.then(function () { toast('Аватар обновлён'); return load(); }).catch(function (e) { toast(e.message); });
+  }
+
+  /** Картинка с ПК → квадрат 256×256 JPEG прямо в браузере: на сервер уходит ~30 КБ, а не исходное фото */
+  function readImage(file) {
+    return new Promise(function (resolve, reject) {
+      if (!file || !/^image\//.test(file.type)) { reject(new Error('Выберите картинку')); return; }
+      var reader = new FileReader();
+      reader.onerror = function () { reject(new Error('Не удалось прочитать файл')); };
+      reader.onload = function () {
+        var img = new Image();
+        img.onerror = function () { reject(new Error('Не удалось открыть картинку')); };
+        img.onload = function () {
+          var size = 256, side = Math.min(img.width, img.height);
+          var canvas = document.createElement('canvas');
+          canvas.width = canvas.height = size;
+          var ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, size, size);
+          ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+          resolve(canvas.toDataURL('image/jpeg', 0.88));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function savePin(pin) {
+    api('/hub/api/pin', { pin: pin }).then(function (r) { $('pin').value = ''; toast(r.pin ? 'PIN сохранён' : 'PIN убран'); return load(); }).catch(function (e) { toast(e.message); });
+  }
+  $('pinSave').onclick = function () {
+    var v = $('pin').value.trim();
+    if (!/^\d{4,8}$/.test(v)) { toast('PIN — от 4 до 8 цифр'); return; }
+    savePin(v);
+  };
+  $('pinClear').onclick = function () { if (confirm('Убрать PIN?')) savePin(''); };
+
+  $('pAvatarView').onclick = function () { openPicker(null); };
+  $('closeBtn').onclick = closePicker;
+  $('picker').onclick = function (e) { if (e.target === $('picker')) closePicker(); };
+  $('clearBtn').onclick = function () { applyAvatar({ value: '' }); };
+  $('emojiBtn').onclick = function () { applyAvatar({ value: $('emojiInput').value.trim() }); };
+  $('uploadBtn').onclick = function () { $('uploadFile').value = ''; $('uploadFile').click(); };
+  $('uploadFile').onchange = function () {
+    readImage(this.files[0]).then(function (data) { applyAvatar({ data: data }); }).catch(function (e) { toast(e.message); });
+  };
+  $('presetGrid').onclick = function (e) {
+    var b = e.target.closest('[data-preset]');
+    if (b) applyAvatar({ value: b.getAttribute('data-preset') });
+  };
+  document.addEventListener('change', function (e) {
+    if (e.target.getAttribute('data-f') === 'child') {
+      var sel = e.target.closest('tr').querySelector('[data-f=age]');
+      if (sel) sel.disabled = !e.target.checked;
+    }
+  });
+
   load();
   // Ожидающие коды появляются, пока страница открыта; не перерисовываем, если что-то редактируется
   setInterval(function () {
     var a = document.activeElement;
     if (a && (a.tagName === 'INPUT' || a.tagName === 'SELECT')) return;
+    if ($('picker').style.display === 'flex') return;
     load();
   }, 4000);
 })();

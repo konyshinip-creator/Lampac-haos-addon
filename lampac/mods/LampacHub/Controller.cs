@@ -7,6 +7,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace LampacHub;
 
@@ -108,8 +109,71 @@ public class HubDeviceController : BaseController
             account = new { id = account.id, name = account.name },
             device = new { id = device.id, name = device.name },
             profile_id = device.profile_id,
-            profiles = profiles.Select(i => new { i.id, i.name, i.avatar, i.child })
+            pin = HubStore.HasPin,
+            profiles = profiles.Select(i => new { i.id, i.name, i.avatar, i.child, i.age_limit })
         });
+    }
+
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (int count, DateTime since)> _pinTries = new();
+
+    /// <summary>Проверка PIN перед выходом из детского профиля. Не больше 5 попыток за 10 минут на устройство.</summary>
+    [HttpPost, AllowAnonymous]
+    [Route("hub/device/pin")]
+    public ActionResult CheckPin(string hub_token, string pin)
+    {
+        if (Off)
+            return NotFound();
+
+        var device = HubStore.FindDevice(hub_token);
+        if (device == null)
+            return Reply(new { status = "revoked" }, 401);
+
+        var now = DateTime.UtcNow;
+        var tries = _pinTries.TryGetValue(device.id, out var t) && now - t.since < TimeSpan.FromMinutes(10) ? t : (0, now);
+        if (tries.Item1 >= 5)
+            return Reply(new { ok = false, error = "Слишком много попыток, подождите 10 минут" }, 429);
+
+        if (HubStore.CheckPin(pin))
+        {
+            _pinTries.TryRemove(device.id, out _);
+            return Reply(new { ok = true });
+        }
+
+        _pinTries[device.id] = (tries.Item1 + 1, tries.Item2);
+        return Reply(new { ok = false, error = "Неверный PIN" }, 403);
+    }
+
+    /// <summary>Готовые аватары из папки модуля avatars/</summary>
+    [HttpGet, AllowAnonymous]
+    [Route("hub/avatars/{name}")]
+    public ActionResult Preset(string name)
+    {
+        if (Off || string.IsNullOrEmpty(name) || !Regex.IsMatch(name, "^[a-z0-9_-]+\\.svg$"))
+            return NotFound();
+
+        string path = Path.Combine(ModInit.modpath, "avatars", name);
+        if (!System.IO.File.Exists(path))
+            return NotFound();
+
+        Response.Headers["Cache-Control"] = "public, max-age=86400";
+        return PhysicalFile(Path.GetFullPath(path), "image/svg+xml");
+    }
+
+    /// <summary>Загруженные аватары: database/LampacHub/avatars/</summary>
+    [HttpGet, AllowAnonymous]
+    [Route("hub/avatar/{name}")]
+    public ActionResult Uploaded(string name)
+    {
+        if (Off || string.IsNullOrEmpty(name) || !Regex.IsMatch(name, "^[a-z0-9]+\\.(jpg|png|webp)$"))
+            return NotFound();
+
+        string path = Path.Combine(HubAvatars.Dir, name);
+        if (!System.IO.File.Exists(path))
+            return NotFound();
+
+        string type = name.EndsWith(".png") ? "image/png" : name.EndsWith(".webp") ? "image/webp" : "image/jpeg";
+        Response.Headers["Cache-Control"] = "public, max-age=31536000, immutable";
+        return PhysicalFile(Path.GetFullPath(path), type);
     }
 
     [HttpPost, AllowAnonymous]
@@ -195,6 +259,8 @@ public class HubAdminController : BaseController
             host,
             code_ttl = ModInit.conf.code_ttl,
             profiles,
+            presets = HubAvatars.Presets(),
+            pin = HubStore.HasPin,
             devices = HubStore.ListDevices(),
             pending = DeviceCodes.Pending().Select(p => new
             {
@@ -239,7 +305,7 @@ public class HubAdminController : BaseController
     [HttpPost]
     [Authorization(accessDeniedMessage: "unauthorized")]
     [Route("hub/api/profile/save")]
-    public ActionResult SaveProfile(string id, string name, string avatar, bool child)
+    public ActionResult SaveProfile(string id, string name, string avatar, bool child, int age_limit = 12)
     {
         if (Off)
             return NotFound();
@@ -254,14 +320,62 @@ public class HubAdminController : BaseController
             return Reply(new { error = "Укажите имя профиля" }, 400);
 
         if (string.IsNullOrEmpty(id))
-            return Reply(new { status = "ok", profile = HubStore.CreateProfile(HubStore.MainAccount, name, avatar, child) });
+            return Reply(new { status = "ok", profile = HubStore.CreateProfile(HubStore.MainAccount, name, avatar, child, age_limit) });
 
         var profile = HubStore.GetProfile(id);
         if (profile == null || profile.account_id != HubStore.MainAccount)
             return Reply(new { error = "Профиль не найден" }, 404);
 
-        HubStore.UpdateProfile(id, name, avatar, child);
+        if (profile.avatar != avatar)
+            HubAvatars.DeleteUploaded(profile.avatar);
+
+        HubStore.UpdateProfile(id, name, avatar, child, age_limit);
         return Reply(new { status = "ok", profile = HubStore.GetProfile(id) });
+    }
+
+    /// <summary>Картинка с ПК: страница уже уменьшила её до 256×256, сюда приходит data URL</summary>
+    [HttpPost]
+    [RequestSizeLimit(4_000_000)]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/profile/avatar")]
+    public ActionResult UploadAvatar(string id, string data)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        var profile = HubStore.GetProfile(id);
+        if (profile == null || profile.account_id != HubStore.MainAccount)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        string url = HubAvatars.Save(data, out string error);
+        if (url == null)
+            return Reply(new { error }, 400);
+
+        HubAvatars.DeleteUploaded(profile.avatar);
+        HubStore.SetAvatar(id, url);
+        return Reply(new { status = "ok", profile = HubStore.GetProfile(id) });
+    }
+
+    [HttpPost]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/pin")]
+    public ActionResult SetPin(string pin)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        pin = (pin ?? string.Empty).Trim();
+        if (pin.Length != 0 && (pin.Length < 4 || pin.Length > 8 || !pin.All(char.IsAsciiDigit)))
+            return Reply(new { error = "PIN — от 4 до 8 цифр" }, 400);
+
+        HubStore.SetPin(pin);
+        return Reply(new { status = "ok", pin = pin.Length != 0 });
     }
 
     [HttpPost]
@@ -277,6 +391,10 @@ public class HubAdminController : BaseController
 
         if (id == HubStore.MainProfile)
             return Reply(new { error = "Основной профиль удалить нельзя" }, 400);
+
+        var old = HubStore.GetProfile(id);
+        if (old != null)
+            HubAvatars.DeleteUploaded(old.avatar);
 
         return HubStore.DeleteProfile(id)
             ? Reply(new { status = "ok" })
