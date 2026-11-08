@@ -41,6 +41,8 @@
   button{padding:8px 16px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;cursor:pointer;transition:filter .15s,transform .05s}
   button:hover{filter:brightness(1.05);box-shadow:inset 0 0 0 2px var(--accent-dark)}
   button:active{transform:translateY(1px)}
+  button.sm{padding:3px 10px;font-size:13px}
+  td input[data-f=name]{width:100%;min-width:9em}
   button.ghost{background:var(--chip);border:0;color:inherit;font-weight:500}
   button.ghost:hover{background:var(--ph);box-shadow:none}
   button.danger{background:transparent;border:1px solid var(--danger);color:var(--danger);font-weight:500}
@@ -334,10 +336,9 @@
   function settingsCell(p) {
     var s = state.settings && state.settings[p.id];
     var info = s ? '<span class="muted">' + s.keys + ' парам., ' + ago(Math.floor(s.updated / 1000)) + '</span>' +
-      ' <button class="ghost" data-sreset="' + esc(p.id) + '" title="Забыть сохранённые настройки профиля">Сбросить</button>'
+      ' <button class="ghost sm" data-sreset="' + esc(p.id) + '" title="Забыть сохранённые настройки профиля">Сбросить</button>'
       : '<span class="muted">ещё не сохранялись</span>';
-    return '<div class="row"><label class="row muted"><input type="checkbox" data-f="plugins"' + (p.sync_plugins ? ' checked' : '') + '> плагины</label></div>' +
-      '<div class="row">' + info + '</div>';
+    return '<div class="row" style="gap:4px 10px"><label class="row muted" style="gap:6px"><input type="checkbox" data-f="plugins"' + (p.sync_plugins ? ' checked' : '') + '> плагины</label>' + info + '</div>';
   }
   function profileName(id) {
     var p = (state && state.profiles || []).filter(function (x) { return x.id === id; })[0];
@@ -387,12 +388,12 @@
       state.profiles.map(function (p) {
         return '<tr data-id="' + esc(p.id) + '"><td>' + avatar(p, true) + '</td>' +
           '<td><input data-f="name" value="' + esc(p.name) + '" maxlength="40"></td>' +
-          '<td class="row"><input type="checkbox" data-f="child"' + (p.child ? ' checked' : '') + '>' +
-          '<select data-f="age" class="age"' + (p.child ? '' : ' disabled') + '>' + ageOptions(p.age_limit) + '</select></td>' +
+          '<td><div class="row" style="flex-wrap:nowrap"><input type="checkbox" data-f="child"' + (p.child ? ' checked' : '') + '>' +
+          '<select data-f="age" class="age"' + (p.child ? '' : ' disabled') + '>' + ageOptions(p.age_limit) + '</select></div></td>' +
           '<td>' + settingsCell(p) + '</td>' +
           '<td class="hide-sm muted">' + esc(p.id) + '</td>' +
-          '<td class="row"><button class="ghost" data-save="' + esc(p.id) + '">Сохранить</button>' +
-          (p.id === '0' ? '' : '<button class="danger" data-del="' + esc(p.id) + '">Удалить</button>') + '</td></tr>';
+          '<td><div class="row" style="flex-wrap:nowrap;justify-content:flex-end"><button class="ghost" data-save="' + esc(p.id) + '">Сохранить</button>' +
+          (p.id === '0' ? '' : '<button class="danger" data-del="' + esc(p.id) + '">Удалить</button>') + '</div></td></tr>';
       }).join('');
 
     $('devices').innerHTML = '<tr><th>Устройство</th><th>Профиль</th><th>Последний вход</th><th class="hide-sm">IP</th><th></th></tr>' +
@@ -401,8 +402,8 @@
           '<td>' + esc(profileName(d.profile_id)) + '</td>' +
           '<td>' + esc(ago(d.last_seen)) + '</td>' +
           '<td class="hide-sm muted">' + esc(d.last_ip) + '</td>' +
-          '<td class="row"><button class="ghost" data-rename="' + esc(d.id) + '">Переименовать</button>' +
-          '<button class="danger" data-revoke="' + esc(d.id) + '">Отозвать</button></td></tr>';
+          '<td><div class="row" style="flex-wrap:nowrap;justify-content:flex-end"><button class="ghost" data-rename="' + esc(d.id) + '">Переименовать</button>' +
+          '<button class="danger" data-revoke="' + esc(d.id) + '">Отозвать</button></div></td></tr>';
       }).join('') : '<tr><td colspan="5" class="muted">Устройств пока нет.</td></tr>');
   }
 
@@ -669,6 +670,7 @@
     var base = lists.items.filter(baseFilter);
     var list = base.filter(function (i) {
       if (dup) return !!dup[i.id];
+      if (f === 'none') return !statusOf(i);
       return !f || i.categories.indexOf(f) >= 0;
     });
     var sort = $('lSort').value;
@@ -714,7 +716,7 @@
   function renderFilterOptions() {
     // числа на фильтре считаем по текущей вкладке и остальным фильтрам
     var save = lists.f, f = lists.cat, dup = f === 'dup' ? duplicates() : null;
-    function inTab(i) { return dup ? !!dup[i.id] : !f || i.categories.indexOf(f) >= 0; }
+    function inTab(i) { return dup ? !!dup[i.id] : f === 'none' ? !statusOf(i) : !f || i.categories.indexOf(f) >= 0; }
     function countBy(group, fn) {
       lists.f = {}; Object.keys(save).forEach(function (k) { lists.f[k] = k === group ? '' : save[k]; });
       var c = {};
@@ -769,10 +771,14 @@
     v.base.forEach(function (i) { i.categories.forEach(function (c) { counts[c] = (counts[c] || 0) + 1; }); });
 
     var tabs = [['', 'Все', v.base.length]].concat(CATS.filter(function (c) { return counts[c[0]] || STATUSES.indexOf(c[0]) >= 0 || c[0] === 'like'; }).map(function (c) { return [c[0], c[1], counts[c[0]] || 0]; }));
+    var none = v.base.filter(function (i) { return !statusOf(i); }).length;
+    var at = tabs.length;
+    tabs.forEach(function (t, n) { if (t[0] === 'rewatch') at = n + 1; });
+    tabs.splice(at, 0, ['none', 'Без статуса', none]);
     if (dupCount) tabs.push(['dup', 'Возможные дубли', dupCount]);
     $('lTabs').innerHTML = tabs.map(function (t) {
       var color = CAT_COLOR[t[0]] ? ' style="--c:' + CAT_COLOR[t[0]] + '"' : '';
-      return '<button class="pill' + (lists.cat === t[0] ? ' on' : '') + '" data-ltab="' + t[0] + '"' + color + '>' + (t[0] && t[0] !== 'dup' ? '<span class="st"></span>' : '') + esc(t[1]) + '<b>' + t[2] + '</b></button>';
+      return '<button class="pill' + (lists.cat === t[0] ? ' on' : '') + '" data-ltab="' + t[0] + '"' + color + '>' + (t[0] && t[0] !== 'dup' && t[0] !== 'none' ? '<span class="st"></span>' : '') + esc(t[1]) + '<b>' + t[2] + '</b></button>';
     }).join('');
 
     $('lCount').textContent = v.list.length === lists.items.length ? 'Всего ' + lists.items.length : 'Найдено ' + v.list.length + ' из ' + lists.items.length;
