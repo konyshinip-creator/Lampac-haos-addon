@@ -504,6 +504,13 @@ public class HubAdminController : BaseController
     static List<string> Csv(string value)
         => (value ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().ToList();
 
+    /// <summary>id жанров TMDB карточки: genre_ids или genres[].id</summary>
+    static int[] Genres(JObject c)
+    {
+        var src = c["genre_ids"] as JArray ?? new JArray((c["genres"] as JArray ?? new JArray()).Select(g => g is JObject o ? o["id"] : g));
+        return src.Select(g => int.TryParse(g?.ToString(), out int id) ? id : 0).Where(id => id > 0).Distinct().ToArray();
+    }
+
     static object Brief(HubLists.Entry e)
     {
         var c = e.card;
@@ -517,6 +524,9 @@ public class HubAdminController : BaseController
             poster = (string)c["poster_path"] ?? (string)c["poster"] ?? (string)c["img"] ?? string.Empty,
             tv = c["name"] != null || c["first_air_date"] != null || (string)c["method"] == "tv",
             source = (string)c["source"] ?? string.Empty,
+            genres = Genres(c),
+            lang = (string)c["original_language"] ?? string.Empty,
+            vote = double.TryParse(c["vote_average"]?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) ? Math.Round(v, 1) : 0,
             e.categories,
             e.updated
         };
