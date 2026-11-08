@@ -725,6 +725,184 @@ public class HubAdminController : BaseController
     }
     #endregion
 
+    #region import
+    [HttpGet]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/import/state")]
+    public ActionResult ImportStatus()
+    {
+        if (Off)
+            return NotFound();
+
+        var queue = HubStore.QueueList();
+        return Reply(new
+        {
+            state = Importer.State,
+            queue = queue.GroupBy(q => q.profile_id).ToDictionary(g => g.Key, g => g.Count())
+        });
+    }
+
+    /// <summary>Импорт Yummy в фоне. Токен (для закрытых списков) не сохраняется и не пишется в лог</summary>
+    [HttpPost]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/import/yummy")]
+    public ActionResult ImportYummy(string profile_id, string user, string token)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        var profile = AdminProfile(profile_id);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        if (string.IsNullOrWhiteSpace(user))
+            return Reply(new { error = "Укажите ник, id или ссылку на профиль Yummy" }, 400);
+
+        string u = user, t = token;
+        bool started = Importer.Start("yummy", profile, host, state => YummySource.Fetch(u, t, state));
+        return started
+            ? Reply(new { status = "ok", state = Importer.State })
+            : Reply(new { error = "Импорт уже идёт" }, 409);
+    }
+
+    /// <summary>Резервная копия Lampa / CUB (JSON) — карточки уже с id TMDB, вливаются сразу</summary>
+    [HttpPost]
+    [RequestSizeLimit(50_000_000)]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/import/lampa")]
+    public async Task<ActionResult> ImportLampa([FromQuery] string profile_id)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        var profile = AdminProfile(profile_id);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        List<HubLists.Portable> items;
+        try
+        {
+            using var reader = new StreamReader(Request.Body, Encoding.UTF8);
+            items = LampaBackupSource.Parse(JToken.Parse(await reader.ReadToEndAsync()));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Reply(new { error = ex.Message }, 400);
+        }
+        catch
+        {
+            return Reply(new { error = "Файл не похож на резервную копию Lampa" }, 400);
+        }
+
+        try
+        {
+            int n = await HubLists.Merge(profile, items);
+            return Reply(new { status = "ok", count = n, skipped = items.Count - n });
+        }
+        catch (TimeoutException ex)
+        {
+            return Reply(new { error = ex.Message }, 503);
+        }
+    }
+
+    [HttpGet]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/import/queue")]
+    public ActionResult ImportQueue(string profile_id)
+    {
+        if (Off)
+            return NotFound();
+
+        var profile = AdminProfile(profile_id);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        return Reply(new { items = HubStore.QueueList(profile.id) });
+    }
+
+    [HttpPost]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/import/queue/resolve")]
+    public async Task<ActionResult> ImportResolve(string id, string kind, string tmdb_id)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        var item = HubStore.QueueGet(id);
+        var profile = item == null ? null : AdminProfile(item.profile_id);
+        if (item == null || profile == null)
+            return Reply(new { error = "Запись очереди не найдена" }, 404);
+
+        if ((kind != "tv" && kind != "movie") || string.IsNullOrEmpty(tmdb_id) || !tmdb_id.All(char.IsDigit))
+            return Reply(new { error = "Неверный тайтл TMDB" }, 400);
+
+        try
+        {
+            await Importer.ResolveQueued(item, profile, kind, tmdb_id, host);
+            return Reply(new { status = "ok" });
+        }
+        catch (Exception ex) when (ex is InvalidOperationException || ex is System.Net.Http.HttpRequestException || ex is TimeoutException)
+        {
+            return Reply(new { error = ex.Message }, 502);
+        }
+    }
+
+    [HttpPost]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/import/queue/skip")]
+    public ActionResult ImportSkip(string id, string profile_id, bool all = false)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        if (all)
+        {
+            var profile = AdminProfile(profile_id);
+            if (profile == null)
+                return Reply(new { error = "Профиль не найден" }, 404);
+            return Reply(new { status = "ok", count = HubStore.QueueClear(profile.id) });
+        }
+
+        return Reply(new { status = "ok", count = HubStore.QueueDelete(id) });
+    }
+
+    /// <summary>Поиск в TMDB для ручного сопоставления</summary>
+    [HttpGet]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/tmdb/search")]
+    public async Task<ActionResult> TmdbSearch(string q, string kind)
+    {
+        if (Off)
+            return NotFound();
+
+        if (kind != "tv" && kind != "movie")
+            kind = null;
+
+        try
+        {
+            Tmdb.Prepare(host);
+            var found = await Tmdb.Search(q, kind);
+            return Reply(new { results = found.Take(20).Select(r => Tmdb.Brief(r.item, r.kind)) });
+        }
+        catch (System.Net.Http.HttpRequestException ex)
+        {
+            return Reply(new { error = ex.Message }, 502);
+        }
+    }
+    #endregion
+
     /// <summary>Забыть сохранённые настройки профиля: следующее устройство профиля отправит свои</summary>
     [HttpPost]
     [Authorization(accessDeniedMessage: "unauthorized")]

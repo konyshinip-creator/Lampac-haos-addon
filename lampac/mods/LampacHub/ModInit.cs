@@ -20,6 +20,15 @@ public class HubConf
 
     /// <summary>hub.js сам подгружает bookmark.js и timecode.js, если их ещё нет в Lampa</summary>
     public bool load_sync { get; set; } = true;
+
+    /// <summary>Ключ TMDB для сопоставления при импорте. Пусто — ключ Lampac (cub.api_key)</summary>
+    public string tmdb_key { get; set; } = string.Empty;
+
+    /// <summary>Токен приложения Yummy (X-Application, yummyani.me/dev/applications). Необязателен</summary>
+    public string yummy_app { get; set; } = string.Empty;
+
+    /// <summary>Таблица соответствий MAL → TMDB/TVDB/IMDb (Fribb/anime-lists), кешируется на 7 дней</summary>
+    public string anime_map_url { get; set; } = "https://raw.githubusercontent.com/Fribb/anime-lists/master/anime-list-full.json";
 }
 
 public class ModInit : IModuleLoaded
