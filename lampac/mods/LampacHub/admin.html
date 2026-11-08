@@ -41,6 +41,7 @@
   button{padding:8px 16px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;cursor:pointer;transition:filter .15s,transform .05s}
   button:hover{filter:brightness(1.05);box-shadow:inset 0 0 0 2px var(--accent-dark)}
   button:active{transform:translateY(1px)}
+  button:disabled{opacity:.35;cursor:not-allowed;filter:none;box-shadow:none}
   button.sm{padding:3px 10px;font-size:13px}
   td input[data-f=name]{width:100%;min-width:9em}
   button.ghost{background:var(--chip);border:0;color:inherit;font-weight:500}
@@ -393,7 +394,7 @@
           '<td>' + settingsCell(p) + '</td>' +
           '<td class="hide-sm muted">' + esc(p.id) + '</td>' +
           '<td><div class="row" style="flex-wrap:nowrap;justify-content:flex-end"><button class="ghost" data-save="' + esc(p.id) + '">Сохранить</button>' +
-          (p.id === '0' ? '' : '<button class="danger" data-del="' + esc(p.id) + '">Удалить</button>') + '</div></td></tr>';
+          (p.id === '0' ? '<button class="danger" disabled title="Основной профиль удалить нельзя">Удалить</button>' : '<button class="danger" data-del="' + esc(p.id) + '">Удалить</button>') + '</div></td></tr>';
       }).join('');
 
     $('devices').innerHTML = '<tr><th>Устройство</th><th>Профиль</th><th>Последний вход</th><th class="hide-sm">IP</th><th></th></tr>' +
