@@ -24,7 +24,7 @@ WORKDIR /lampac
 COPY run.sh /run.sh
 
 # Дополнительные модули этого репозитория (Senku, Anistar, Animaunt, AnimeFox,
-# AniTokyo, Hentasis, HentaiUkr, AnimeMonitor). Lampac компилирует их Roslyn-ом из /lampac/mods при старте.
+# AniTokyo, Hentasis, HentaiUkr, AnimeMonitor, LampacHub). Lampac компилирует их Roslyn-ом из /lampac/mods при старте.
 COPY mods/ /lampac/mods/
 
 RUN chmod +x /run.sh \

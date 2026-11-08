@@ -1,0 +1,433 @@
+using Microsoft.Data.Sqlite;
+using Shared.Services;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+
+namespace LampacHub;
+
+public class HubAccount
+{
+    public string id { get; set; }
+    public string name { get; set; }
+
+    /// <summary>
+    /// Идентичность Sync/TimeCode (uid в запросах Lampa). Пусто — общая идентичность сервера
+    /// (database/instance.uid), которую Lampac и так раздаёт всем клиентам, пока accsdb пуст.
+    /// </summary>
+    public string uid { get; set; }
+
+    public long created { get; set; }
+}
+
+public class HubProfile
+{
+    /// <summary>
+    /// Значение lampac_profile_id в Lampa. "0" — основная область данных пользователя (та, куда
+    /// Sync и TimeCode пишут без профиля), поэтому накопленные закладки остаются в основном профиле.
+    /// </summary>
+    public string id { get; set; }
+    public string account_id { get; set; }
+    public string name { get; set; }
+    public string avatar { get; set; }
+    public bool child { get; set; }
+    public int sort { get; set; }
+    public long created { get; set; }
+}
+
+public class HubDevice
+{
+    public string id { get; set; }
+    public string account_id { get; set; }
+    public string profile_id { get; set; }
+    public string name { get; set; }
+    public long created { get; set; }
+    public long last_seen { get; set; }
+    public string last_ip { get; set; }
+    public string user_agent { get; set; }
+}
+
+/// <summary>Аккаунты, профили и устройства — database/LampacHub.sql</summary>
+public static class HubStore
+{
+    public const string MainAccount = "main";
+    public const string MainProfile = "0";
+
+    static readonly object _lock = new object();
+
+    static readonly string _connection = new SqliteConnectionStringBuilder
+    {
+        DataSource = "database/LampacHub.sql",
+        Cache = SqliteCacheMode.Shared,
+        DefaultTimeout = 10,
+        Pooling = true
+    }.ToString();
+
+    public static bool Ready { get; private set; }
+
+    #region init
+    public static void Init(string accountName)
+    {
+        Directory.CreateDirectory("database");
+
+        lock (_lock)
+        {
+            using var db = Open();
+            Exec(db, @"
+CREATE TABLE IF NOT EXISTS accounts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    uid TEXT NOT NULL DEFAULT '',
+    created INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS profiles (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    avatar TEXT,
+    child INTEGER NOT NULL DEFAULT 0,
+    sort INTEGER NOT NULL DEFAULT 0,
+    created INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS devices (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    profile_id TEXT,
+    name TEXT,
+    token_hash TEXT NOT NULL UNIQUE,
+    created INTEGER NOT NULL,
+    last_seen INTEGER NOT NULL DEFAULT 0,
+    last_ip TEXT,
+    user_agent TEXT
+);
+CREATE TABLE IF NOT EXISTS meta (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);");
+
+            if (Scalar(db, "SELECT COUNT(*) FROM accounts WHERE id = $id", ("$id", MainAccount)) == 0)
+            {
+                Exec(db, "INSERT INTO accounts (id, name, uid, created) VALUES ($id, $name, '', $now)",
+                    ("$id", MainAccount), ("$name", accountName), ("$now", Now()));
+            }
+
+            if (Scalar(db, "SELECT COUNT(*) FROM profiles WHERE account_id = $a", ("$a", MainAccount)) == 0)
+            {
+                Exec(db, "INSERT INTO profiles (id, account_id, name, avatar, child, sort, created) VALUES ($id, $a, $name, '', 0, 0, $now)",
+                    ("$id", MainProfile), ("$a", MainAccount), ("$name", "Основной"), ("$now", Now()));
+            }
+        }
+
+        Ready = true;
+    }
+    #endregion
+
+    #region accounts
+    public static HubAccount GetAccount(string id)
+    {
+        using var db = Open();
+        using var cmd = Command(db, "SELECT id, name, uid, created FROM accounts WHERE id = $id", ("$id", id));
+        using var r = cmd.ExecuteReader();
+        if (!r.Read())
+            return null;
+
+        return new HubAccount
+        {
+            id = r.GetString(0),
+            name = r.GetString(1),
+            uid = r.IsDBNull(2) ? string.Empty : r.GetString(2),
+            created = r.GetInt64(3)
+        };
+    }
+
+    /// <summary>
+    /// uid, с которым устройства аккаунта ходят в Sync/TimeCode.
+    ///
+    /// Пока accsdb пуст, Lampac сам раздаёт всем клиентам одну идентичность сервера, а timecode.js
+    /// при каждом запуске возвращает lampac_unic_id к ней. Поэтому основной аккаунт берёт именно её:
+    /// иначе timecode.js и hub.js перетягивали бы uid друг у друга. Если accsdb заполнен и общей
+    /// идентичности нет, аккаунт получает свой постоянный uid.
+    /// </summary>
+    public static string EffectiveUid(HubAccount account)
+    {
+        if (account == null)
+            return null;
+
+        if (!string.IsNullOrEmpty(account.uid))
+            return account.uid;
+
+        string assigned = InstanceIdentity.Assigned;
+        if (!string.IsNullOrEmpty(assigned))
+            return assigned;
+
+        lock (_lock)
+        {
+            string key = "uid:" + account.id;
+            string stored = GetMeta(key);
+            if (string.IsNullOrEmpty(stored))
+            {
+                stored = RandomId(16);
+                SetMeta(key, stored);
+            }
+            return stored;
+        }
+    }
+    #endregion
+
+    #region profiles
+    public static List<HubProfile> ListProfiles(string accountId)
+    {
+        var list = new List<HubProfile>();
+        using var db = Open();
+        using var cmd = Command(db, "SELECT id, account_id, name, avatar, child, sort, created FROM profiles WHERE account_id = $a ORDER BY sort, created", ("$a", accountId));
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            list.Add(ReadProfile(r));
+        return list;
+    }
+
+    public static HubProfile GetProfile(string id)
+    {
+        if (string.IsNullOrEmpty(id))
+            return null;
+
+        using var db = Open();
+        using var cmd = Command(db, "SELECT id, account_id, name, avatar, child, sort, created FROM profiles WHERE id = $id", ("$id", id));
+        using var r = cmd.ExecuteReader();
+        return r.Read() ? ReadProfile(r) : null;
+    }
+
+    static HubProfile ReadProfile(SqliteDataReader r) => new HubProfile
+    {
+        id = r.GetString(0),
+        account_id = r.GetString(1),
+        name = r.GetString(2),
+        avatar = r.IsDBNull(3) ? string.Empty : r.GetString(3),
+        child = r.GetInt64(4) != 0,
+        sort = r.GetInt32(5),
+        created = r.GetInt64(6)
+    };
+
+    public static HubProfile CreateProfile(string accountId, string name, string avatar, bool child)
+    {
+        string id;
+
+        lock (_lock)
+        {
+            using var db = Open();
+            do
+            {
+                id = "p" + RandomId(7);
+            }
+            while (Scalar(db, "SELECT COUNT(*) FROM profiles WHERE id = $id", ("$id", id)) > 0);
+
+            long sort = Scalar(db, "SELECT COALESCE(MAX(sort), 0) + 1 FROM profiles WHERE account_id = $a", ("$a", accountId));
+
+            Exec(db, "INSERT INTO profiles (id, account_id, name, avatar, child, sort, created) VALUES ($id, $a, $name, $avatar, $child, $sort, $now)",
+                ("$id", id), ("$a", accountId), ("$name", name), ("$avatar", avatar ?? string.Empty),
+                ("$child", child ? 1 : 0), ("$sort", sort), ("$now", Now()));
+        }
+
+        return GetProfile(id);
+    }
+
+    public static bool UpdateProfile(string id, string name, string avatar, bool child)
+    {
+        lock (_lock)
+        {
+            using var db = Open();
+            return Exec(db, "UPDATE profiles SET name = $name, avatar = $avatar, child = $child WHERE id = $id",
+                ("$id", id), ("$name", name), ("$avatar", avatar ?? string.Empty), ("$child", child ? 1 : 0)) > 0;
+        }
+    }
+
+    /// <summary>Закладки и история профиля остаются в базе Sync/TimeCode, удаляется только запись профиля</summary>
+    public static bool DeleteProfile(string id)
+    {
+        if (id == MainProfile)
+            return false;
+
+        lock (_lock)
+        {
+            using var db = Open();
+            Exec(db, "UPDATE devices SET profile_id = NULL WHERE profile_id = $id", ("$id", id));
+            return Exec(db, "DELETE FROM profiles WHERE id = $id", ("$id", id)) > 0;
+        }
+    }
+    #endregion
+
+    #region devices
+    public static List<HubDevice> ListDevices()
+    {
+        var list = new List<HubDevice>();
+        using var db = Open();
+        using var cmd = Command(db, "SELECT id, account_id, profile_id, name, created, last_seen, last_ip, user_agent FROM devices ORDER BY last_seen DESC");
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            list.Add(ReadDevice(r));
+        return list;
+    }
+
+    static HubDevice ReadDevice(SqliteDataReader r) => new HubDevice
+    {
+        id = r.GetString(0),
+        account_id = r.GetString(1),
+        profile_id = r.IsDBNull(2) ? null : r.GetString(2),
+        name = r.IsDBNull(3) ? string.Empty : r.GetString(3),
+        created = r.GetInt64(4),
+        last_seen = r.GetInt64(5),
+        last_ip = r.IsDBNull(6) ? string.Empty : r.GetString(6),
+        user_agent = r.IsDBNull(7) ? string.Empty : r.GetString(7)
+    };
+
+    /// <summary>Создаёт устройство и возвращает его токен. В базе хранится только SHA-256 токена.</summary>
+    public static string CreateDevice(string accountId, string profileId, string name, string ip, string userAgent, out HubDevice device)
+    {
+        string token = RandomId(40);
+        long now = Now();
+
+        device = new HubDevice
+        {
+            id = "d" + RandomId(11),
+            account_id = accountId,
+            profile_id = profileId,
+            name = Trim(name, 80),
+            created = now,
+            last_seen = now,
+            last_ip = ip ?? string.Empty,
+            user_agent = Trim(userAgent, 300)
+        };
+
+        lock (_lock)
+        {
+            using var db = Open();
+            Exec(db, "INSERT INTO devices (id, account_id, profile_id, name, token_hash, created, last_seen, last_ip, user_agent) VALUES ($id, $a, $p, $name, $hash, $now, $now, $ip, $ua)",
+                ("$id", device.id), ("$a", accountId), ("$p", (object)profileId ?? DBNull.Value), ("$name", device.name),
+                ("$hash", Hash(token)), ("$now", now), ("$ip", device.last_ip), ("$ua", device.user_agent));
+        }
+
+        return token;
+    }
+
+    public static HubDevice FindDevice(string token)
+    {
+        if (string.IsNullOrEmpty(token) || token.Length > 128)
+            return null;
+
+        using var db = Open();
+        using var cmd = Command(db, "SELECT id, account_id, profile_id, name, created, last_seen, last_ip, user_agent FROM devices WHERE token_hash = $h", ("$h", Hash(token)));
+        using var r = cmd.ExecuteReader();
+        return r.Read() ? ReadDevice(r) : null;
+    }
+
+    public static void TouchDevice(string id, string ip, string userAgent)
+    {
+        lock (_lock)
+        {
+            using var db = Open();
+            Exec(db, "UPDATE devices SET last_seen = $now, last_ip = $ip, user_agent = $ua WHERE id = $id",
+                ("$id", id), ("$now", Now()), ("$ip", ip ?? string.Empty), ("$ua", Trim(userAgent, 300)));
+        }
+    }
+
+    public static bool SetDeviceProfile(string id, string profileId)
+    {
+        lock (_lock)
+        {
+            using var db = Open();
+            return Exec(db, "UPDATE devices SET profile_id = $p WHERE id = $id", ("$id", id), ("$p", (object)profileId ?? DBNull.Value)) > 0;
+        }
+    }
+
+    public static bool RenameDevice(string id, string name)
+    {
+        lock (_lock)
+        {
+            using var db = Open();
+            return Exec(db, "UPDATE devices SET name = $name WHERE id = $id", ("$id", id), ("$name", Trim(name, 80))) > 0;
+        }
+    }
+
+    public static bool DeleteDevice(string id)
+    {
+        lock (_lock)
+        {
+            using var db = Open();
+            return Exec(db, "DELETE FROM devices WHERE id = $id", ("$id", id)) > 0;
+        }
+    }
+    #endregion
+
+    #region meta
+    static string GetMeta(string key)
+    {
+        using var db = Open();
+        using var cmd = Command(db, "SELECT value FROM meta WHERE key = $k", ("$k", key));
+        return cmd.ExecuteScalar() as string;
+    }
+
+    static void SetMeta(string key, string value)
+    {
+        using var db = Open();
+        Exec(db, "INSERT INTO meta (key, value) VALUES ($k, $v) ON CONFLICT(key) DO UPDATE SET value = excluded.value", ("$k", key), ("$v", value));
+    }
+    #endregion
+
+    #region helpers
+    static SqliteConnection Open()
+    {
+        var db = new SqliteConnection(_connection);
+        db.Open();
+        return db;
+    }
+
+    static SqliteCommand Command(SqliteConnection db, string sql, params (string name, object value)[] args)
+    {
+        var cmd = db.CreateCommand();
+        cmd.CommandText = sql;
+        foreach (var (name, value) in args)
+            cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
+        return cmd;
+    }
+
+    static int Exec(SqliteConnection db, string sql, params (string name, object value)[] args)
+    {
+        using var cmd = Command(db, sql, args);
+        return cmd.ExecuteNonQuery();
+    }
+
+    static long Scalar(SqliteConnection db, string sql, params (string name, object value)[] args)
+    {
+        using var cmd = Command(db, sql, args);
+        object v = cmd.ExecuteScalar();
+        return v == null || v is DBNull ? 0 : Convert.ToInt64(v);
+    }
+
+    public static long Now() => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+    const string Alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+    /// <summary>Только строчные латинские буквы и цифры — переживает санитайзер Sync/TimeCode и ValidateIdentity</summary>
+    public static string RandomId(int length)
+    {
+        var sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++)
+            sb.Append(Alphabet[RandomNumberGenerator.GetInt32(Alphabet.Length)]);
+        return sb.ToString();
+    }
+
+    static string Hash(string token)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+
+    public static string Trim(string value, int max)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+
+        value = value.Trim();
+        return value.Length > max ? value.Substring(0, max) : value;
+    }
+    #endregion
+}

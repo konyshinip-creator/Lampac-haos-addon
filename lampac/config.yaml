@@ -66,6 +66,8 @@ options:
   xhamster_host: "https://ua.xhamster2.com"
   enable_monitor: true
   monitor_interval: 10
+  # --- LampacHub: профили, вход устройств по коду, админка /hub ---
+  enable_hub: false
   monitor_webhook: ""
   extra_init_json: ""
 
@@ -98,6 +100,7 @@ schema:
   enable_hentaiukr: bool
   xhamster_host: str?
   enable_monitor: bool
+  enable_hub: bool
   monitor_interval: int(1,1440)
   monitor_webhook: str?
   extra_init_json: str?
