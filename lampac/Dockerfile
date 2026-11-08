@@ -13,9 +13,17 @@ USER root
 # jq ставим через apt (glibc-сборка, совместимая с этим Debian/Ubuntu
 # образом). НЕ копируйте статический jq из alpine (musl libc) — он не может
 # запуститься в glibc-окружении ("cannot execute: required file not found").
+#
+# libe_sqlite3.so из образа (SQLitePCLRaw 2.1.14+) собрана с AVX: на CPU без
+# AVX (Celeron N3350 и т.п.) dotnet падает с SIGILL, аддон выходит с кодом
+# 132. Подменяем её системной libsqlite3 из Debian — она собрана под базовый
+# x86-64/aarch64 и даёт тот же sqlite3_* API.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends jq \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends jq libsqlite3-0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && SQLITE_LIB="$(find /usr/lib -name 'libsqlite3.so.0' | head -n 1)" \
+    && test -n "$SQLITE_LIB" \
+    && ln -sf "$SQLITE_LIB" /lampac/libe_sqlite3.so
 
 WORKDIR /lampac
 
