@@ -5,62 +5,145 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LampacHub</title>
 <style>
-  :root{color-scheme:dark;--bg:#121418;--card:#1c1f26;--line:#2c313b;--muted:#9aa0a6;--accent:#4c8dff;--danger:#f05454;--ok:#3ec27a}
+  :root{color-scheme:light;--bg:#eff1f2;--bg2:#fff;--card:#fff;--card2:#f5f5f3;--line:#e4e4e2;--line2:#dddddd;--text:#211f1b;--muted:#78797a;--accent:#d8c39a;--accent-ink:#211f1b;--accent-dark:#936a3b;--danger:#c03b3b;--ok:#2f9e6a;--warn:#b7791f;--radius:10px;--input:#fff;--chip:#ededed;--ph:#e6e4df;--shadow:0 6px 24px rgba(33,31,27,.11);--top:#211f1b;--glow:0 .6em 2em rgba(216,195,154,.75)}
+  :root[data-theme=dark]{color-scheme:dark;--bg:#14130f;--bg2:#1c1b17;--card:#1f1e1a;--card2:#29271f;--line:#33302a;--line2:#433f36;--text:#ece8df;--muted:#9a958a;--input:#17160f;--chip:#2c2a24;--ph:#2c2a24;--shadow:0 10px 30px rgba(0,0,0,.35);--glow:0 .5em 1.6em rgba(216,195,154,.35)}
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:#e8eaed;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-  main{max-width:960px;margin:0 auto;padding:16px}
-  header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 Roboto,system-ui,-apple-system,Segoe UI,sans-serif}
+  main{max-width:1180px;margin:0 auto;padding:16px}
+  .top{position:sticky;top:0;z-index:5;background:rgba(33,31,27,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff}
+  .top .in{max-width:1180px;margin:0 auto;padding:14px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;letter-spacing:.01em}
+  .logo{width:30px;height:30px;border-radius:50%;background:var(--accent);color:#211f1b;display:inline-flex;align-items:center;justify-content:center;font-size:14px}
+  .top .muted{color:#b9b3a6}
+  #acc{font-weight:400}
+  nav{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
+  nav button{background:transparent;color:var(--accent);font-weight:500;padding:7px 15px;border-radius:999px}
+  nav button:hover{background:rgba(216,195,154,.12);filter:none}
+  nav button.on{color:#211f1b;background:var(--accent)}
+  #themeBtn{color:#b9b3a6;padding:5px 10px;font-size:18px}
+  .badge{display:inline-block;min-width:18px;padding:0 6px;margin-left:4px;border-radius:999px;background:var(--danger);color:#fff;font-size:11px;line-height:18px;text-align:center}
+  .badge:empty{display:none}
   h1{margin:0;font-size:22px}
-  h2{margin:0 0 12px;font-size:17px}
+  h2{margin:0 0 12px;font-size:18px;font-weight:650}
+  h3{margin:18px 0 8px;font-size:15px;font-weight:600}
   .muted{color:var(--muted);font-size:13px}
-  section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:16px 0}
+  section{background:var(--card);border-radius:var(--radius);padding:20px;margin:18px 0;box-shadow:var(--shadow)}
+  section[hidden]{display:none}
+  .sub{background:var(--card2);border-radius:10px;padding:14px;margin-top:12px}
+  .sub h3{margin-top:0}
   .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  input,select{padding:8px 10px;border-radius:8px;border:1px solid #3a404c;background:#12151b;color:inherit;font:inherit;min-width:0}
+  .spacer{flex:1}
+  input,select{padding:8px 11px;border-radius:8px;border:1px solid var(--line2);background:var(--input);color:inherit;font:inherit;min-width:0;outline:none;transition:border-color .15s,box-shadow .15s}
+  input:focus,select:focus{border-color:var(--accent-dark);box-shadow:0 0 0 3px rgba(216,195,154,.35)}
+  input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent-dark);padding:0}
   input.code{font-size:22px;letter-spacing:6px;width:9.5em;text-align:center;font-variant-numeric:tabular-nums}
-  button{padding:8px 14px;border:0;border-radius:8px;background:var(--accent);color:#fff;font:inherit;font-weight:600;cursor:pointer}
-  button.ghost{background:transparent;border:1px solid #3a404c;color:inherit;font-weight:500}
+  button{padding:8px 16px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;cursor:pointer;transition:filter .15s,transform .05s}
+  button:hover{filter:brightness(1.05);box-shadow:inset 0 0 0 2px var(--accent-dark)}
+  button:active{transform:translateY(1px)}
+  button.ghost{background:var(--chip);border:0;color:inherit;font-weight:500}
+  button.ghost:hover{background:var(--ph);box-shadow:none}
   button.danger{background:transparent;border:1px solid var(--danger);color:var(--danger);font-weight:500}
+  button.danger:hover{background:rgba(192,59,59,.08);box-shadow:none}
   table{width:100%;border-collapse:collapse}
-  td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+  td,th{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+  tr:hover td{background:var(--card2)}
   th{font-size:12px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em}
-  .avatar{width:32px;height:32px;border-radius:50%;background:#2a2f3a;display:inline-flex;align-items:center;justify-content:center;font-size:18px;overflow:hidden;vertical-align:middle}
+  .avatar{width:32px;height:32px;border-radius:50%;background:var(--chip);display:inline-flex;align-items:center;justify-content:center;font-size:18px;overflow:hidden;vertical-align:middle}
   .avatar img{width:100%;height:100%;object-fit:cover}
-  .tag{display:inline-block;padding:1px 8px;border-radius:999px;background:#2a2f3a;font-size:12px;margin-left:6px}
-  .pending{border:1px dashed var(--accent);border-radius:10px;padding:12px;margin-bottom:8px}
+  .tag{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--chip);font-size:12px;margin-left:6px}
+  .pending{border:1px dashed var(--accent-dark);border-radius:10px;padding:12px;margin-bottom:8px;background:rgba(216,195,154,.15)}
   .pending b{font-size:22px;letter-spacing:4px;font-variant-numeric:tabular-nums}
-  #toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:#2a2f3a;padding:10px 16px;border-radius:8px;display:none;max-width:calc(100% - 32px)}
+  #toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:#211f1b;color:#fff;padding:10px 16px;border-radius:10px;display:none;max-width:calc(100% - 32px);z-index:20;box-shadow:0 10px 30px rgba(0,0,0,.4)}
   .scroll{overflow-x:auto}
   .avatar.big{width:44px;height:44px;font-size:24px;cursor:pointer;border:2px solid transparent}
-  .avatar.big:hover{border-color:var(--accent)}
+  .avatar.big:hover{border-color:var(--accent-dark)}
   #picker{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
-  #picker .box{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;width:100%;max-width:520px;max-height:90vh;overflow:auto}
+  #picker .box{background:var(--card);border-radius:10px;padding:16px;width:100%;max-width:520px;max-height:90vh;overflow:auto}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:10px;margin:12px 0}
   .grid button{padding:0;background:transparent;border:2px solid transparent;border-radius:50%;aspect-ratio:1;overflow:hidden}
-  .grid button:hover,.grid button:focus{border-color:var(--accent)}
+  .grid button:hover,.grid button:focus{border-color:var(--accent-dark)}
   .grid img{width:100%;height:100%;display:block}
   .age{min-width:5.5em}
-  .poster{width:34px;height:50px;border-radius:4px;object-fit:cover;background:#2a2f3a;display:block}
-  .chip{display:inline-block;padding:1px 8px;border-radius:999px;background:#2a2f3a;font-size:12px;margin:2px 4px 2px 0}
-  .chip.dup{background:#5a3a12}
-  .star{background:transparent;border:0;font-size:20px;padding:0 6px;color:#666;cursor:pointer}
-  .star.on{color:#ffc83d}
-  #lBulk{margin:10px 0;padding:8px 10px;border:1px dashed var(--line);border-radius:10px}
-  .cand{display:inline-flex;gap:6px;align-items:center;padding:4px 8px 4px 4px;margin:3px 6px 3px 0;border:1px solid #3a404c;border-radius:8px;background:transparent;color:inherit;font-weight:500;text-align:left}
+  .poster{width:36px;height:54px;border-radius:6px;object-fit:cover;background:var(--ph);display:block}
+  .chip{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--chip);font-size:12px;margin:2px 4px 2px 0}
+  .chip.dup{background:#fbe3c2;color:#7a4a10}
+  .chip.g{background:transparent;border:1px solid var(--line2);color:var(--muted)}
+  .star{background:transparent;border:0;font-size:20px;padding:0 6px;color:#b8b4aa;cursor:pointer}
+  .star:hover{box-shadow:none}
+  .star.on{color:#e0a800}
+  #lBulk{margin:10px 0;padding:10px 12px;background:#211f1b;color:#fff;border-radius:10px;position:sticky;top:70px;z-index:3;box-shadow:var(--shadow)}
+  #lBulk select{background:#2f2c26;color:#fff;border-color:#4a463d}
+  #lBulk button.ghost{background:#3a362e;color:#fff}
+  .cand{display:inline-flex;gap:6px;align-items:center;padding:4px 8px 4px 4px;margin:3px 6px 3px 0;border:1px solid var(--line2);border-radius:8px;background:transparent;color:inherit;font-weight:500;text-align:left}
   .cand img,.cand .poster{width:28px;height:42px}
-  .cand:hover{border-color:var(--accent)}
+  .cand:hover{border-color:var(--accent-dark)}
   .qitem{border-bottom:1px solid var(--line);padding:10px 0}
   #iState{white-space:pre-line}
-  @media (max-width:640px){.hide-sm{display:none}}
+  .pills{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px}
+  .pill{background:var(--chip);border:0;color:var(--text);font-weight:500;padding:8px 14px;border-radius:.6em;font-size:14px}
+  .pill b{color:var(--text);font-weight:600;margin-left:4px}
+  .pill:hover{filter:none;box-shadow:inset 0 0 0 2px var(--accent)}
+  .pill.on{background:var(--accent);color:#211f1b;box-shadow:var(--glow)}
+  .pill.on b{color:#211f1b}
+  .lwrap{display:grid;grid-template-columns:230px 1fr;gap:18px;align-items:start}
+  .lmain{min-width:0}
+  .side-wrap>summary{display:none;font-weight:600;cursor:pointer;margin-bottom:6px}
+  .side{position:sticky;top:70px;max-height:calc(100vh - 86px);overflow:auto;padding-right:4px}
+  .side h4{margin:16px 0 8px;font-size:15px;font-weight:700;color:var(--text)}
+  .side h4:first-child{margin-top:0}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .fchip{background:var(--chip);border:0;color:var(--text);font-weight:400;font-size:14px;padding:6px 12px;border-radius:31px}
+  .fchip:hover{filter:none;box-shadow:inset 0 0 0 2px var(--accent)}
+  .fchip.on{background:var(--accent);color:#211f1b}
+  .fchip.x{color:var(--muted);padding:4px 9px}
+  .fchip small{opacity:.6;margin-left:3px}
+  .side .reset{margin-top:16px;width:100%}
+  .filters{display:grid;grid-template-columns:minmax(180px,2fr) repeat(4,minmax(120px,1fr)) auto;gap:8px;align-items:center}
+  .filters .yr{display:flex;gap:4px;align-items:center}
+  .filters .yr select{flex:1}
+  .seg{display:inline-flex;background:var(--chip);border-radius:8px;overflow:hidden;flex:none}
+  .seg button{background:transparent;border-radius:0;padding:7px 12px;color:var(--muted);font-weight:500}
+  .seg button:hover{box-shadow:none}
+  .seg button.on{background:var(--accent);color:#211f1b}
+  .st{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--c,#555);vertical-align:middle}
+  select.status{border-left:3px solid var(--c,var(--line2))}
+  .posters{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:22px 18px;margin-top:10px}
+  .pc{position:relative;display:flex;flex-direction:column}
+  .pc .img{position:relative;aspect-ratio:2/3;border-radius:8px;background:var(--ph) center/cover no-repeat;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;color:var(--muted);font-size:13px;box-shadow:0 4px 14px rgba(33,31,27,.15);transition:transform .15s,box-shadow .15s;overflow:hidden}
+  .pc:hover .img{transform:translateY(-3px);box-shadow:0 10px 26px rgba(33,31,27,.25)}
+  .pc.sel .img{box-shadow:0 0 0 3px var(--accent-dark),0 10px 26px rgba(33,31,27,.25)}
+  .pc .ov{position:absolute;top:8px;left:8px;right:8px;display:flex;align-items:center;justify-content:space-between;padding:3px 6px;border-radius:999px;background:rgba(33,31,27,.38);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);line-height:0}
+  .pc .ov .star{font-size:19px;padding:0 2px;color:rgba(255,255,255,.75);line-height:1}
+  .pc .ov .star.on{color:#ffd24a}
+  .pc .badge-st{position:absolute;left:8px;bottom:8px;padding:2px 9px;border-radius:999px;font-size:12px;color:#fff;background:var(--c,#555)}
+  .pc .body{padding:9px 2px 0;display:flex;flex-direction:column;gap:4px;flex:1}
+  .pc .t{font-weight:500;font-size:15px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .pc .meta{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
+  .rate{border:1px solid currentColor;color:var(--text);border-radius:4px;padding:0 4px;font-weight:700;font-size:12px;line-height:16px}
+  .dot{width:4px;height:4px;border-radius:50%;background:var(--accent-dark)}
+  .pc select{width:100%;padding:5px 8px;font-size:13px;margin-top:6px}
+  details summary{cursor:pointer;color:var(--muted);font-size:13px;margin-top:12px}
+  .empty{padding:30px;text-align:center;color:var(--muted)}
+  @media (max-width:900px){.lwrap{grid-template-columns:1fr}.side-wrap>summary{display:list-item}.side{position:static;max-height:none}.filters{grid-template-columns:1fr 1fr}.filters .wide{grid-column:1/-1}}
+  @media (max-width:640px){.hide-sm{display:none}nav{margin-left:0;width:100%;overflow-x:auto;flex-wrap:nowrap}nav button{white-space:nowrap}.posters{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:16px 12px}#lBulk{top:110px}.tools{flex-wrap:wrap!important}.tools input{flex-basis:100%!important}main{padding:10px}section{padding:14px}}
 </style>
 </head>
 <body>
+<div class="top"><div class="in">
+  <div class="brand"><span class="logo">▶</span>LampacHub <span class="muted" id="acc"></span></div>
+  <nav id="tabs">
+    <button data-tab="lists">Списки</button>
+    <button data-tab="import">Импорт <span class="badge" id="queueBadge"></span></button>
+    <button data-tab="profiles">Профили</button>
+    <button data-tab="devices">Устройства <span class="badge" id="pendBadge"></span></button>
+    <button data-tab="pin">PIN</button>
+    <button id="themeBtn" title="Светлая / тёмная тема">◐</button>
+  </nav>
+</div></div>
 <main>
-  <header>
-    <h1>LampacHub</h1>
-    <span class="muted" id="acc"></span>
-  </header>
 
-  <section>
+  <section data-tab="devices">
     <h2>Вход устройства по коду</h2>
     <p class="muted">В Lampa на устройстве: <b>Настройки → LampacHub → Войти по коду</b>. Устройство покажет 6 цифр — введите их здесь или подтвердите из списка ниже.</p>
     <div class="row">
@@ -72,7 +155,7 @@
     <div id="pending" style="margin-top:12px"></div>
   </section>
 
-  <section>
+  <section data-tab="profiles">
     <h2>Профили</h2>
     <p class="muted">У каждого профиля свои закладки, история и тайм-коды. «Основной» — общая область, где лежат данные, накопленные до LampacHub. Нажмите на аватар, чтобы выбрать готовый или загрузить с ПК.</p>
     <p class="muted">Настройки Lampa (язык, тема, вид интерфейса, источники, парсер и TorrServer) общие для всех устройств профиля. Плеер, размер интерфейса и другие параметры конкретного экрана остаются на устройстве. Галочка «плагины» переносит ещё и плагины, установленные вручную в Lampa.</p>
@@ -87,23 +170,38 @@
     </div>
   </section>
 
-  <section>
-    <h2>Списки</h2>
-    <p class="muted">Категории как в Yummy/Anihub: Смотрю, Планирую, Просмотрено, Отложено, Брошено, Пересматриваю и Избранное. Первые пять и Избранное — это категории Lampa (Синхронизация Lampac), «Пересматриваю» хранит LampacHub. Изменения отсюда устройства подхватят при следующем запуске Lampa.</p>
-    <div class="row">
+  <section data-tab="lists">
+    <div class="row" style="margin-bottom:10px">
+      <h2 style="margin:0">Списки</h2>
       <select id="lProfile" title="Профиль"></select>
-      <select id="lFilter" title="Категория"></select>
-      <input id="lSearch" placeholder="Поиск по названию" style="flex:1;min-width:10em">
-    </div>
-    <div class="row" style="margin-top:8px">
+      <span class="spacer"></span>
       <button class="ghost" id="lExport">Экспорт профиля</button>
-      <button class="ghost" id="lExportAll">Экспорт всех профилей</button>
-      <button class="ghost" id="lImport">Импорт JSON в профиль…</button>
+      <button class="ghost" id="lExportAll">Экспорт всех</button>
+      <button class="ghost" id="lImport">Импорт JSON…</button>
       <input type="file" id="lImportFile" accept=".json,application/json" hidden>
+    </div>
+    <div class="pills" id="lTabs"></div>
+    <div class="lwrap">
+    <details class="side-wrap" id="lSideWrap" open><summary>Фильтры</summary><aside class="side" id="lSide"></aside></details>
+    <div class="lmain">
+    <div class="row tools" style="flex-wrap:nowrap">
+      <input id="lSearch" type="search" placeholder="Поиск по названию или оригинальному названию" style="flex:1">
+      <select id="lSort" title="Сортировка">
+        <option value="">Недавно изменённые</option>
+        <option value="title">По названию</option>
+        <option value="year">Сначала новые</option>
+        <option value="year_asc">Сначала старые</option>
+        <option value="vote">По рейтингу TMDB</option>
+      </select>
+      <div class="seg"><button data-view="grid" title="Плитки">▦</button><button data-view="table" title="Таблица">☰</button></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label class="row muted"><input type="checkbox" id="lSelAll"> выбрать все найденные</label>
+      <span class="spacer"></span>
       <span class="muted" id="lCount"></span>
     </div>
     <div class="row" id="lBulk" style="display:none">
-      <span id="lSel"></span>
+      <b id="lSel"></b>
       <select id="lBulkStatus"></select>
       <button class="ghost" id="lBulkApply">Применить</button>
       <span class="muted">в профиль</span>
@@ -111,26 +209,34 @@
       <button class="ghost" id="lCopy">Копировать</button>
       <button class="ghost" id="lMove">Перенести</button>
       <button class="danger" id="lRemove">Убрать из списков</button>
+      <button class="ghost" id="lUnsel">Снять выбор</button>
     </div>
+    <div id="lGrid" class="posters"></div>
     <div class="scroll"><table id="lists"></table></div>
-    <div class="row" style="margin-top:8px"><button class="ghost" id="lMore" style="display:none">Показать ещё</button></div>
+    <div class="row" style="margin-top:12px;justify-content:center"><button class="ghost" id="lMore" style="display:none">Показать ещё</button></div>
+    </div></div>
+    <details><summary>Что за категории</summary>
+      <p class="muted">Категории как в Yummy/Anihub: Смотрю, Планирую, Просмотрено, Отложено, Брошено, Пересматриваю и Избранное. Первые пять и Избранное — это категории Lampa (Синхронизация Lampac), «Пересматриваю» хранит LampacHub. Изменения отсюда устройства подхватят при следующем запуске Lampa. «Возможные дубли» — одно название и год под разными id или несколько статусов сразу.</p>
+    </details>
   </section>
 
-  <section>
+  <section data-tab="import">
     <h2>Импорт</h2>
     <p class="muted">Импорт добавляет тайтлы в списки выбранного профиля: статусы переносятся 1:1, Любимые попадают в Избранное. Тайтлы сопоставляются с TMDB по id MAL/Shikimori (таблица Fribb/anime-lists), а если не получилось — по названию и году. Что не сопоставилось само, попадает в очередь ниже. Сезоны одного сериала в TMDB становятся одной карточкой.</p>
     <div class="row">
-      <span class="muted">Профиль</span>
+      <span class="muted">Импортировать в профиль</span>
       <select id="iProfile"></select>
     </div>
-    <h2 style="margin-top:14px">Yummy Anime</h2>
+    <div class="sub">
+    <h3>Yummy Anime</h3>
     <div class="row">
       <input id="iYummyUser" placeholder="Ник, id или ссылка на профиль Yummy" style="flex:1;min-width:14em">
       <input id="iYummyToken" type="password" placeholder="Токен (только для закрытых списков)" autocomplete="off" style="flex:1;min-width:12em">
       <button id="iYummyGo">Импортировать</button>
     </div>
     <p class="muted">Публичные списки читаются без входа. Если списки закрыты, откройте их в настройках приватности Yummy или вставьте токен входа. Токен нужен только на время импорта и нигде не сохраняется. Пароль от Yummy не нужен.</p>
-    <h2 style="margin-top:14px">AniLiberty</h2>
+    </div><div class="sub">
+    <h3>AniLiberty</h3>
     <div class="row">
       <button id="iAlOtp">Войти по коду</button>
       <span id="iAlCode" class="muted"></span>
@@ -142,24 +248,29 @@
       <button id="iAlGo">Импортировать</button>
     </div>
     <p class="muted">Импортируются коллекции (Смотрю, Запланировано → Планирую, Просмотрено, Отложено, Брошено) и Избранное. Логин, пароль и токен нужны только на время импорта и нигде не сохраняются.</p>
-    <h2 style="margin-top:14px">Anihub</h2>
+    </div><div class="sub">
+    <h3>Anihub</h3>
     <p class="muted">У Anihub (anihub.in.ua) нет открытого API и экспорта списков, поэтому прямой импорт невозможен. Если списки есть на Shikimori или MAL, их можно перенести через Yummy или резервную копию.</p>
-    <h2 style="margin-top:14px">Резервная копия Lampa / CUB</h2>
+    </div><div class="sub">
+    <h3>Резервная копия Lampa / CUB</h3>
     <div class="row">
       <button class="ghost" id="iLampa">Загрузить файл…</button>
       <input type="file" id="iLampaFile" accept=".json,application/json,text/plain" hidden>
       <span class="muted">JSON с ключом <code>favorite</code>: копия localStorage Lampa или бэкап. Тайтлы там уже с id TMDB.</span>
     </div>
-    <div id="iState" class="muted" style="margin-top:12px"></div>
-    <h2 style="margin-top:14px">Ручное сопоставление <span class="muted" id="iQCount"></span></h2>
+    </div>
+    <div id="iState" class="sub muted" style="display:none"></div>
+    <div class="sub">
+    <h3>Ручное сопоставление <span class="muted" id="iQCount"></span></h3>
     <div class="row" style="margin-bottom:8px">
       <button class="ghost" id="iQReload">Обновить</button>
       <button class="danger" id="iQClear">Очистить очередь профиля</button>
     </div>
     <div id="iQueue"></div>
+    </div>
   </section>
 
-  <section>
+  <section data-tab="pin">
     <h2>PIN детского профиля</h2>
     <p class="muted">Lampa спросит PIN, когда с детского профиля переключаются на другой или выходят из LampacHub. <span id="pinState"></span></p>
     <div class="row">
@@ -169,7 +280,7 @@
     </div>
   </section>
 
-  <section>
+  <section data-tab="devices">
     <h2>Устройства</h2>
     <div class="scroll"><table id="devices"></table></div>
     <p class="muted">Отзыв удаляет вход устройства: при следующем запуске Lampa оно выйдет из LampacHub и вернётся к экрану входа.</p>
@@ -259,7 +370,8 @@
   }
 
   function render() {
-    $('acc').textContent = 'Аккаунт: ' + state.account.name;
+    $('acc').textContent = '· ' + state.account.name;
+    $('pendBadge').textContent = (state.pending || []).length || '';
     $('pinState').textContent = state.pin ? 'Сейчас PIN задан.' : 'Сейчас PIN не задан — переключение свободное.';
     var keep = $('codeProfile').value;
     $('codeProfile').innerHTML = profileOptions(keep || '0');
@@ -454,6 +566,31 @@
     }
   });
 
+  // --- тема -------------------------------------------------------------------
+  var THEME_KEY = 'lampachub_admin_theme';
+  function setTheme(t) {
+    if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); else document.documentElement.removeAttribute('data-theme');
+    try { localStorage.setItem(THEME_KEY, t); } catch (e) { }
+  }
+  setTheme((function () { try { return localStorage.getItem(THEME_KEY) || 'light'; } catch (e) { return 'light'; } })());
+  $('themeBtn').onclick = function () { setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'); };
+
+  // --- вкладки ----------------------------------------------------------------
+  var TAB_KEY = 'lampachub_admin_tab';
+  function showTab(tab) {
+    var known = ['lists', 'import', 'profiles', 'devices', 'pin'];
+    if (known.indexOf(tab) < 0) tab = 'lists';
+    document.querySelectorAll('section[data-tab]').forEach(function (s) { s.hidden = s.getAttribute('data-tab') !== tab; });
+    document.querySelectorAll('#tabs [data-tab]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-tab') === tab); });
+    try { localStorage.setItem(TAB_KEY, tab); } catch (e) { }
+    if (location.hash !== '#' + tab) history.replaceState(null, '', '#' + tab);
+  }
+  $('tabs').onclick = function (e) {
+    var b = e.target.closest('[data-tab]');
+    if (b) { showTab(b.getAttribute('data-tab')); window.scrollTo(0, 0); }
+  };
+  showTab(location.hash.slice(1) || (function () { try { return localStorage.getItem(TAB_KEY); } catch (e) { return null; } })() || 'lists');
+
   load().then(function () { if (state) { renderListsControls(); loadLists(); renderImportControls(); loadQueue(); pollImport(); } });
   // --- списки ---------------------------------------------------------------
   var CATS = [
@@ -489,23 +626,127 @@
     return dup;
   }
 
-  function posterUrl(p) {
+  function posterUrl(p, size) {
     if (!p) return '';
     if (/^https?:\/\//i.test(p)) return p;
-    if (p.charAt(0) === '/') return 'https://image.tmdb.org/t/p/w92' + p;
+    if (p.charAt(0) === '/') return 'https://image.tmdb.org/t/p/' + (size || 'w92') + p;
     return '';
   }
 
+  var GENRES = {
+    28: 'Боевик', 12: 'Приключения', 16: 'Мультфильм', 35: 'Комедия', 80: 'Криминал', 99: 'Документальный', 18: 'Драма',
+    10751: 'Семейный', 14: 'Фэнтези', 36: 'История', 27: 'Ужасы', 10402: 'Музыка', 9648: 'Детектив', 10749: 'Мелодрама',
+    878: 'Фантастика', 10770: 'Телефильм', 53: 'Триллер', 10752: 'Военный', 37: 'Вестерн',
+    10759: 'Боевик и приключения', 10762: 'Детский', 10763: 'Новости', 10764: 'Реалити-шоу', 10765: 'НФ и фэнтези',
+    10766: 'Мыльная опера', 10767: 'Ток-шоу', 10768: 'Война и политика'
+  };
+  var CAT_COLOR = { look: '#35c98a', scheduled: '#5b8cff', viewed: '#8f97a8', continued: '#ffb74a', thrown: '#ff5d6c', rewatch: '#b07cff', like: '#e0a800', history: '#4fb3c9', book: '#6c7a96', wath: '#6c7a96', dup: '#c77a2a' };
+  var VIEW_KEY = 'lampachub_admin_view';
+  lists.cat = '';
+  lists.view = (function () { try { return localStorage.getItem(VIEW_KEY) || 'grid'; } catch (e) { return 'grid'; } })();
+
+  function isAnime(i) { return i.lang === 'ja' && (i.genres || []).indexOf(16) >= 0; }
+
+  /** Фильтры кроме категории: от них считаем числа на вкладках */
+  function baseFilter(i) {
+    var q = normTitle($('lSearch').value), type = lists.f.type, genre = +lists.f.genre || 0, y = +i.year || 0;
+    var from = 0, to = 0;
+    if (/^\d{4}$/.test(lists.f.year)) from = to = +lists.f.year;
+    else if (/^d\d{4}$/.test(lists.f.year)) { from = +lists.f.year.slice(1); to = from + 9; }
+    if (q && normTitle(i.title + ' ' + i.original).indexOf(q) < 0) return false;
+    if (type === 'tv' && !i.tv) return false;
+    if (type === 'movie' && i.tv) return false;
+    if (type === 'anime' && !isAnime(i)) return false;
+    if (genre && (i.genres || []).indexOf(genre) < 0) return false;
+    if ((from || to) && !y) return false;
+    if (from && y < from) return false;
+    if (to && y > to) return false;
+    return true;
+  }
+
   function visibleItems() {
-    var f = $('lFilter').value, q = normTitle($('lSearch').value), dup = f === 'dup' ? duplicates() : null;
-    var list = lists.items.filter(function (i) {
-      if (dup && !dup[i.id]) return false;
-      if (f && f !== 'dup' && i.categories.indexOf(f) < 0) return false;
-      if (q && normTitle(i.title + ' ' + i.original).indexOf(q) < 0) return false;
-      return true;
+    var f = lists.cat, dup = f === 'dup' ? duplicates() : null;
+    var base = lists.items.filter(baseFilter);
+    var list = base.filter(function (i) {
+      if (dup) return !!dup[i.id];
+      return !f || i.categories.indexOf(f) >= 0;
     });
-    if (dup) list.sort(function (a, b) { return normTitle(a.title).localeCompare(normTitle(b.title)); });
-    return { list: list, dup: dup || {} };
+    var sort = $('lSort').value;
+    if (dup || sort === 'title') list.sort(function (a, b) { return normTitle(a.title).localeCompare(normTitle(b.title)); });
+    else if (sort === 'year') list.sort(function (a, b) { return (+b.year || 0) - (+a.year || 0); });
+    else if (sort === 'year_asc') list.sort(function (a, b) { return (+a.year || 9999) - (+b.year || 9999); });
+    else if (sort === 'vote') list.sort(function (a, b) { return (b.vote || 0) - (a.vote || 0); });
+    return { list: list, base: base, dup: dup || {} };
+  }
+
+  lists.f = { type: '', genre: '', year: '' };
+
+  /** Фильтры в адресе страницы: ссылкой можно поделиться, «Назад» их не теряет */
+  function saveFilters() {
+    var q = [];
+    if (lists.cat) q.push('cat=' + encodeURIComponent(lists.cat));
+    ['type', 'genre', 'year'].forEach(function (k) { if (lists.f[k]) q.push(k + '=' + encodeURIComponent(lists.f[k])); });
+    if ($('lSearch').value.trim()) q.push('q=' + encodeURIComponent($('lSearch').value.trim()));
+    if ($('lSort').value) q.push('sort=' + encodeURIComponent($('lSort').value));
+    if (lists.profile && lists.profile !== '0') q.push('profile=' + encodeURIComponent(lists.profile));
+    history.replaceState(null, '', location.pathname + (q.length ? '?' + q.join('&') : '') + location.hash);
+  }
+
+  (function readFilters() {
+    var p = {};
+    location.search.replace(/^\?/, '').split('&').forEach(function (kv) {
+      if (!kv) return;
+      var i = kv.indexOf('=');
+      p[decodeURIComponent(i < 0 ? kv : kv.slice(0, i))] = i < 0 ? '' : decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' '));
+    });
+    lists.cat = p.cat || '';
+    lists.f.type = p.type || ''; lists.f.genre = p.genre || ''; lists.f.year = p.year || '';
+    if (p.q) $('lSearch').value = p.q;
+    if (p.sort) $('lSort').value = p.sort;
+    if (p.profile) lists.profile = p.profile;
+  })();
+
+  function chip(group, value, label, count) {
+    var on = String(lists.f[group]) === String(value);
+    return '<button class="fchip' + (value === '' ? ' x' : '') + (on && value !== '' ? ' on' : '') + '" data-fg="' + group + '" data-fv="' + esc(value) + '">' + label + (count != null ? '<small>' + count + '</small>' : '') + '</button>';
+  }
+
+  function renderFilterOptions() {
+    // числа на фильтре считаем по текущей вкладке и остальным фильтрам
+    var save = lists.f, f = lists.cat, dup = f === 'dup' ? duplicates() : null;
+    function inTab(i) { return dup ? !!dup[i.id] : !f || i.categories.indexOf(f) >= 0; }
+    function countBy(group, fn) {
+      lists.f = {}; Object.keys(save).forEach(function (k) { lists.f[k] = k === group ? '' : save[k]; });
+      var c = {};
+      lists.items.forEach(function (i) { if (inTab(i) && baseFilter(i)) fn(i).forEach(function (k) { c[k] = (c[k] || 0) + 1; }); });
+      lists.f = save;
+      return c;
+    }
+    var types = countBy('type', function (i) { var r = [i.tv ? 'tv' : 'movie']; if (isAnime(i)) r.push('anime'); return r; });
+    var genres = countBy('genre', function (i) { return (i.genres || []).filter(function (g) { return GENRES[g]; }); });
+    var years = countBy('year', function (i) { var y = +i.year; return y ? [String(y), 'd' + (y - y % 10)] : []; });
+
+    var html = '<h4>Тип</h4><div class="chips">' + chip('type', '', '✕ Все') +
+      [['tv', 'Сериалы'], ['movie', 'Фильмы'], ['anime', 'Аниме']].map(function (t) { return chip('type', t[0], t[1], types[t[0]] || 0); }).join('') + '</div>';
+
+    var gk = Object.keys(genres).sort(function (a, b) { return genres[b] - genres[a]; });
+    if (gk.length || lists.f.genre) html += '<h4>Жанр</h4><div class="chips">' + chip('genre', '', '✕ Все') +
+      gk.map(function (g) { return chip('genre', g, GENRES[g], genres[g]); }).join('') + '</div>';
+
+    var now = new Date().getFullYear(), recent = [], decades = [];
+    Object.keys(years).forEach(function (k) {
+      if (k.charAt(0) === 'd') { if (+k.slice(1) <= now - 10 || +k.slice(1) + 9 < now - 5) decades.push(k); }
+      else if (+k > now - 6) recent.push(k);
+    });
+    recent.sort(function (a, b) { return b - a; });
+    decades.sort(function (a, b) { return b.slice(1) - a.slice(1); });
+    if (recent.length || decades.length || lists.f.year) html += '<h4>Год</h4><div class="chips">' + chip('year', '', '✕ Все') +
+      recent.map(function (y) { return chip('year', y, y, years[y]); }).join('') +
+      decades.map(function (d) { return chip('year', d, d.slice(1) + '-е', years[d]); }).join('') + '</div>';
+
+    var any = lists.cat || lists.f.type || lists.f.genre || lists.f.year || $('lSearch').value || $('lSort').value;
+    if (any) html += '<button class="ghost reset" id="lReset">Сбросить всё</button>';
+    $('lSide').innerHTML = html;
   }
 
   function renderListsControls() {
@@ -518,36 +759,68 @@
     }).join('');
   }
 
+  function statusOf(i) { return STATUSES.filter(function (c) { return i.categories.indexOf(c) >= 0; })[0] || ''; }
+
   function renderLists() {
+    renderFilterOptions();
+    saveFilters();
     var v = visibleItems();
-    var counts = {};
-    lists.items.forEach(function (i) { i.categories.forEach(function (c) { counts[c] = (counts[c] || 0) + 1; }); });
+    var counts = {}, dupCount = Object.keys(duplicates()).filter(function (id) { return v.base.some(function (i) { return i.id === id; }); }).length;
+    v.base.forEach(function (i) { i.categories.forEach(function (c) { counts[c] = (counts[c] || 0) + 1; }); });
 
-    var f = $('lFilter').value;
-    $('lFilter').innerHTML = '<option value="">Все (' + lists.items.length + ')</option>' + CATS.map(function (c) {
-      return '<option value="' + c[0] + '"' + (f === c[0] ? ' selected' : '') + '>' + c[1] + ' (' + (counts[c[0]] || 0) + ')</option>';
-    }).join('') + '<option value="dup"' + (f === 'dup' ? ' selected' : '') + '>Возможные дубли</option>';
-
-    $('lCount').textContent = v.list.length === lists.items.length ? '' : 'Показано ' + v.list.length + ' из ' + lists.items.length;
-
-    var rows = v.list.slice(0, lists.shown).map(function (i) {
-      var status = STATUSES.filter(function (c) { return i.categories.indexOf(c) >= 0; })[0] || '';
-      var chips = i.categories.filter(function (c) { return STATUSES.indexOf(c) < 0 && c !== 'like'; }).map(function (c) { return '<span class="chip">' + esc(catName[c] || c) + '</span>'; }).join('');
-      if (v.dup[i.id]) chips += '<span class="chip dup">' + esc(v.dup[i.id]) + '</span>';
-      var img = posterUrl(i.poster);
-      return '<tr data-lid="' + esc(i.id) + '">' +
-        '<td><input type="checkbox" data-lsel="' + esc(i.id) + '"' + (lists.selected[i.id] ? ' checked' : '') + '></td>' +
-        '<td class="hide-sm">' + (img ? '<img class="poster" loading="lazy" src="' + esc(img) + '" alt="">' : '<span class="poster"></span>') + '</td>' +
-        '<td><b>' + esc(i.title) + '</b> <span class="muted">' + esc([i.year, i.tv ? 'сериал' : 'фильм'].filter(Boolean).join(' · ')) + '</span>' +
-          (i.original && i.original !== i.title ? '<div class="muted">' + esc(i.original) + '</div>' : '') +
-          '<div>' + chips + '<span class="muted hide-sm">id ' + esc(i.id) + '</span></div></td>' +
-        '<td><select data-lstatus="' + esc(i.id) + '">' + statusOptions(status, '— без статуса —') + '</select></td>' +
-        '<td><button class="star' + (i.categories.indexOf('like') >= 0 ? ' on' : '') + '" data-llike="' + esc(i.id) + '" title="Избранное">★</button></td>' +
-        '<td><button class="danger" data-ldel="' + esc(i.id) + '" title="Убрать из всех списков">✕</button></td></tr>';
+    var tabs = [['', 'Все', v.base.length]].concat(CATS.filter(function (c) { return counts[c[0]] || STATUSES.indexOf(c[0]) >= 0 || c[0] === 'like'; }).map(function (c) { return [c[0], c[1], counts[c[0]] || 0]; }));
+    if (dupCount) tabs.push(['dup', 'Возможные дубли', dupCount]);
+    $('lTabs').innerHTML = tabs.map(function (t) {
+      var color = CAT_COLOR[t[0]] ? ' style="--c:' + CAT_COLOR[t[0]] + '"' : '';
+      return '<button class="pill' + (lists.cat === t[0] ? ' on' : '') + '" data-ltab="' + t[0] + '"' + color + '>' + (t[0] && t[0] !== 'dup' ? '<span class="st"></span>' : '') + esc(t[1]) + '<b>' + t[2] + '</b></button>';
     }).join('');
 
-    $('lists').innerHTML = rows || '<tr><td class="muted">' + (lists.loading ? 'Загрузка…' : lists.sync === false ? 'База Sync не найдена: включите модуль Sync в Lampac.' : 'Пусто') + '</td></tr>';
+    $('lCount').textContent = v.list.length === lists.items.length ? 'Всего ' + lists.items.length : 'Найдено ' + v.list.length + ' из ' + lists.items.length;
+    document.querySelectorAll('[data-view]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-view') === lists.view); });
+
+    var shown = v.list.slice(0, lists.shown);
+    var empty = '<div class="empty">' + (lists.loading ? 'Загрузка…' : lists.sync === false ? 'База Sync не найдена: включите модуль Sync в Lampac.' : lists.items.length ? 'Ничего не найдено — измените фильтры.' : 'Списки профиля пусты') + '</div>';
+
+    if (lists.view === 'grid') {
+      $('lists').innerHTML = '';
+      $('lGrid').style.display = '';
+      $('lGrid').innerHTML = shown.map(function (i) {
+        var status = statusOf(i), img = posterUrl(i.poster, 'w300');
+        return '<div class="pc' + (lists.selected[i.id] ? ' sel' : '') + '" data-lid="' + esc(i.id) + '">' +
+          '<div class="img"' + (img ? ' style="background-image:url(\'' + esc(img) + '\')"' : '') + '>' + (img ? '' : esc(i.title)) +
+          '<div class="ov"><input type="checkbox" data-lsel="' + esc(i.id) + '"' + (lists.selected[i.id] ? ' checked' : '') + ' title="Выбрать">' +
+          '<button class="star' + (i.categories.indexOf('like') >= 0 ? ' on' : '') + '" data-llike="' + esc(i.id) + '" title="Избранное">★</button></div>' +
+          (status ? '<span class="badge-st" style="--c:' + CAT_COLOR[status] + '">' + esc(catName[status]) + '</span>' : '') + '</div>' +
+          '<div class="body"><div class="t" title="' + esc(i.original || i.title) + '">' + esc(i.title) + '</div>' +
+          '<div class="meta">' + (i.vote ? '<span class="rate">' + i.vote.toFixed(1) + '</span><span class="dot"></span>' : '') + esc([i.year, isAnime(i) ? 'аниме' : i.tv ? 'сериал' : 'фильм'].filter(Boolean).join(' · ')) + '</div>' +
+          (v.dup[i.id] ? '<div class="muted" style="color:var(--warn)">' + esc(v.dup[i.id]) + '</div>' : '') +
+          '<select class="status" style="--c:' + (CAT_COLOR[status] || 'var(--line2)') + '" data-lstatus="' + esc(i.id) + '">' + statusOptions(status, '— без статуса —') + '</select></div></div>';
+      }).join('') || empty;
+    } else {
+      $('lGrid').innerHTML = '';
+      $('lGrid').style.display = 'none';
+      var rows = shown.map(function (i) {
+        var status = statusOf(i);
+        var chips = i.categories.filter(function (c) { return STATUSES.indexOf(c) < 0 && c !== 'like'; }).map(function (c) { return '<span class="chip">' + esc(catName[c] || c) + '</span>'; }).join('');
+        chips += (i.genres || []).slice(0, 3).map(function (g) { return GENRES[g] ? '<span class="chip g">' + GENRES[g] + '</span>' : ''; }).join('');
+        if (v.dup[i.id]) chips += '<span class="chip dup">' + esc(v.dup[i.id]) + '</span>';
+        var img = posterUrl(i.poster);
+        return '<tr data-lid="' + esc(i.id) + '">' +
+          '<td><input type="checkbox" data-lsel="' + esc(i.id) + '"' + (lists.selected[i.id] ? ' checked' : '') + '></td>' +
+          '<td class="hide-sm">' + (img ? '<img class="poster" loading="lazy" src="' + esc(img) + '" alt="">' : '<span class="poster"></span>') + '</td>' +
+          '<td><b>' + esc(i.title) + '</b> <span class="muted">' + esc([i.year, isAnime(i) ? 'аниме' : i.tv ? 'сериал' : 'фильм', i.vote ? '★ ' + i.vote.toFixed(1) : ''].filter(Boolean).join(' · ')) + '</span>' +
+            (i.original && i.original !== i.title ? '<div class="muted">' + esc(i.original) + '</div>' : '') +
+            '<div>' + chips + '<span class="muted hide-sm">id ' + esc(i.id) + '</span></div></td>' +
+          '<td><select class="status" style="--c:' + (CAT_COLOR[status] || 'var(--line2)') + '" data-lstatus="' + esc(i.id) + '">' + statusOptions(status, '— без статуса —') + '</select></td>' +
+          '<td><button class="star' + (i.categories.indexOf('like') >= 0 ? ' on' : '') + '" data-llike="' + esc(i.id) + '" title="Избранное">★</button></td>' +
+          '<td><button class="danger" data-ldel="' + esc(i.id) + '" title="Убрать из всех списков">✕</button></td></tr>';
+      }).join('');
+      $('lists').innerHTML = rows || '<tr><td>' + empty + '</td></tr>';
+    }
+
+    $('lSelAll').checked = v.list.length > 0 && v.list.every(function (i) { return lists.selected[i.id]; });
     $('lMore').style.display = v.list.length > lists.shown ? '' : 'none';
+    $('lMore').textContent = 'Показать ещё (' + (v.list.length - lists.shown) + ')';
     renderBulk();
   }
 
@@ -580,14 +853,48 @@
   }
 
   $('lProfile').onchange = function () { lists.selected = {}; lists.shown = 100; loadLists(); };
-  $('lFilter').onchange = function () { lists.shown = 100; renderLists(); };
-  $('lSearch').oninput = function () { lists.shown = 100; renderLists(); };
+  function refilter() { lists.shown = 100; renderLists(); }
+  $('lSearch').oninput = function () { clearTimeout(refilter.t); refilter.t = setTimeout(refilter, 250); };
+  $('lSort').onchange = refilter;
+  $('lSide').onclick = function (e) {
+    var b = e.target.closest('[data-fg]');
+    if (b) {
+      var g = b.getAttribute('data-fg'), val = b.getAttribute('data-fv');
+      lists.f[g] = String(lists.f[g]) === val ? '' : val;
+      refilter();
+    }
+    else if (e.target.id === 'lReset') {
+      $('lSearch').value = ''; $('lSort').value = '';
+      lists.f = { type: '', genre: '', year: '' }; lists.cat = ''; refilter();
+    }
+  };
+  $('lTabs').onclick = function (e) {
+    var b = e.target.closest('[data-ltab]');
+    if (b) { lists.cat = b.getAttribute('data-ltab'); refilter(); }
+  };
+  document.querySelectorAll('[data-view]').forEach(function (b) {
+    b.onclick = function () {
+      lists.view = b.getAttribute('data-view');
+      try { localStorage.setItem(VIEW_KEY, lists.view); } catch (e) { }
+      renderLists();
+    };
+  });
+  $('lSelAll').onchange = function () {
+    var on = this.checked;
+    visibleItems().list.forEach(function (i) { if (on) lists.selected[i.id] = true; else delete lists.selected[i.id]; });
+    renderLists();
+  };
+  $('lUnsel').onclick = function () { lists.selected = {}; renderLists(); };
   $('lMore').onclick = function () { lists.shown += 200; renderLists(); };
   $('lBulkStatus').innerHTML = statusOptions('', 'Статус…');
 
   document.addEventListener('change', function (e) {
     var t = e.target, id;
-    if ((id = t.getAttribute('data-lsel'))) { lists.selected[id] = t.checked; renderBulk(); }
+    if ((id = t.getAttribute('data-lsel'))) {
+      if (t.checked) lists.selected[id] = true; else delete lists.selected[id];
+      var card = t.closest('.pc'); if (card) card.classList.toggle('sel', t.checked);
+      renderBulk();
+    }
     else if ((id = t.getAttribute('data-lstatus'))) {
       if (t.value) change([id], [t.value], []);
       else change([id], [], STATUSES);
