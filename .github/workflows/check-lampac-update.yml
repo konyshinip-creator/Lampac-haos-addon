@@ -156,6 +156,10 @@ jobs:
           curl -fsS "${ADM[@]}" "$H/hub/api/import/queue?profile_id=0" | jq -e '.items | type == "array"' >/dev/null || { echo "::error::hub: очередь сопоставления"; FAIL=1; }
           code=$(curl -s -o /dev/null -w '%{http_code}' "${ADM[@]}" -X POST -d "profile_id=0&user=" "$H/hub/api/import/yummy")
           echo "import/yummy без ника -> $code"; [ "$code" = "400" ] || FAIL=1
+          code=$(curl -s -o /dev/null -w '%{http_code}' "${ADM[@]}" -X POST -d "profile_id=0&login=" "$H/hub/api/import/aniliberty")
+          echo "import/aniliberty без входа -> $code"; [ "$code" = "400" ] || FAIL=1
+          code=$(curl -s -o /dev/null -w '%{http_code}' "${ADM[@]}" -X POST -d "profile_id=0&otp=true" "$H/hub/api/import/aniliberty")
+          echo "import/aniliberty без кода -> $code"; [ "$code" = "400" ] || FAIL=1
           code=$(curl -s -o /dev/null -w '%{http_code}' "${ADM[@]}" -X POST -d "id=nope&kind=tv&tmdb_id=1" "$H/hub/api/import/queue/resolve")
           echo "queue/resolve чужой записи -> $code"; [ "$code" = "404" ] || FAIL=1
           code=$(curl -s -o /dev/null -w '%{http_code}' --cookie "accspasswd=ci-test" -X POST -d "profile_id=0&user=1" "$H/hub/api/import/yummy")
