@@ -64,6 +64,7 @@
   <section>
     <h2>Профили</h2>
     <p class="muted">У каждого профиля свои закладки, история и тайм-коды. «Основной» — общая область, где лежат данные, накопленные до LampacHub. Нажмите на аватар, чтобы выбрать готовый или загрузить с ПК.</p>
+    <p class="muted">Настройки Lampa (язык, тема, вид интерфейса, источники, парсер и TorrServer) общие для всех устройств профиля. Плеер, размер интерфейса и другие параметры конкретного экрана остаются на устройстве. Галочка «плагины» переносит ещё и плагины, установленные вручную в Lampa.</p>
     <p class="muted">Детский профиль: в Lampa скрыта «Клубничка», карточки с возрастным рейтингом выше лимита не открываются, из списков убираются тайтлы 18+, ужасы и триллеры (при лимите ниже 16+).</p>
     <div class="scroll"><table id="profiles"></table></div>
     <div class="row" style="margin-top:12px">
@@ -136,6 +137,14 @@
     if (isImage(a)) return '<span class="' + cls + '"' + attr + '><img src="' + esc(a) + '" alt=""></span>';
     return '<span class="' + cls + '"' + attr + '>' + esc(a || (p && p.name ? p.name.charAt(0).toUpperCase() : '?')) + '</span>';
   }
+  function settingsCell(p) {
+    var s = state.settings && state.settings[p.id];
+    var info = s ? '<span class="muted">' + s.keys + ' парам., ' + ago(Math.floor(s.updated / 1000)) + '</span>' +
+      ' <button class="ghost" data-sreset="' + esc(p.id) + '" title="Забыть сохранённые настройки профиля">Сбросить</button>'
+      : '<span class="muted">ещё не сохранялись</span>';
+    return '<div class="row"><label class="row muted"><input type="checkbox" data-f="plugins"' + (p.sync_plugins ? ' checked' : '') + '> плагины</label></div>' +
+      '<div class="row">' + info + '</div>';
+  }
   function profileName(id) {
     var p = (state && state.profiles || []).filter(function (x) { return x.id === id; })[0];
     return p ? p.name : '—';
@@ -179,12 +188,13 @@
         '<button data-confirm="' + esc(p.code) + '">Подтвердить</button></div>';
     }).join('') || '<span class="muted">Сейчас никто не ждёт подтверждения.</span>';
 
-    $('profiles').innerHTML = '<tr><th>Аватар</th><th>Имя</th><th>Детский</th><th class="hide-sm">ID</th><th></th></tr>' +
+    $('profiles').innerHTML = '<tr><th>Аватар</th><th>Имя</th><th>Детский</th><th>Настройки</th><th class="hide-sm">ID</th><th></th></tr>' +
       state.profiles.map(function (p) {
         return '<tr data-id="' + esc(p.id) + '"><td>' + avatar(p, true) + '</td>' +
           '<td><input data-f="name" value="' + esc(p.name) + '" maxlength="40"></td>' +
           '<td class="row"><input type="checkbox" data-f="child"' + (p.child ? ' checked' : '') + '>' +
           '<select data-f="age" class="age"' + (p.child ? '' : ' disabled') + '>' + ageOptions(p.age_limit) + '</select></td>' +
+          '<td>' + settingsCell(p) + '</td>' +
           '<td class="hide-sm muted">' + esc(p.id) + '</td>' +
           '<td class="row"><button class="ghost" data-save="' + esc(p.id) + '">Сохранить</button>' +
           (p.id === '0' ? '' : '<button class="danger" data-del="' + esc(p.id) + '">Удалить</button>') + '</td></tr>';
@@ -244,8 +254,13 @@
         name: tr.querySelector('[data-f=name]').value.trim(),
         avatar: findProfile(id).avatar || '',
         child: tr.querySelector('[data-f=child]').checked,
-        age_limit: tr.querySelector('[data-f=age]').value
+        age_limit: tr.querySelector('[data-f=age]').value,
+        sync_plugins: tr.querySelector('[data-f=plugins]').checked
       }).then(function () { toast('Сохранено'); return load(); }).catch(function (e) { toast(e.message); });
+    }
+    else if ((id = t.getAttribute('data-sreset'))) {
+      if (!confirm('Забыть настройки профиля? Следующее устройство профиля сохранит свои.')) return;
+      api('/hub/api/profile/settings/reset', { id: id }).then(function () { toast('Настройки сброшены'); return load(); }).catch(function (e) { toast(e.message); });
     }
     else if ((id = t.getAttribute('data-del'))) {
       if (!confirm('Удалить профиль? Его закладки и история останутся в базе Sync, но в Lampa профиль пропадёт.')) return;
@@ -297,7 +312,7 @@
     var id = pickerTarget, p = findProfile(id);
     var req = choice.data
       ? api('/hub/api/profile/avatar', { id: id, data: choice.data })
-      : api('/hub/api/profile/save', { id: id, name: p.name, avatar: choice.value, child: p.child, age_limit: p.age_limit });
+      : api('/hub/api/profile/save', { id: id, name: p.name, avatar: choice.value, child: p.child, age_limit: p.age_limit, sync_plugins: p.sync_plugins });
     req.then(function () { toast('Аватар обновлён'); return load(); }).catch(function (e) { toast(e.message); });
   }
 

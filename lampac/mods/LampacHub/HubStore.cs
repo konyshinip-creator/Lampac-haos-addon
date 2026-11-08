@@ -1,4 +1,6 @@
 using Microsoft.Data.Sqlite;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Shared.Services;
 using System;
 using System.Collections.Generic;
@@ -36,6 +38,9 @@ public class HubProfile
 
     /// <summary>Возрастной лимит детского профиля: 0, 6, 12 или 16</summary>
     public int age_limit { get; set; } = 12;
+
+    /// <summary>Переносить между устройствами профиля и вручную установленные плагины Lampa</summary>
+    public bool sync_plugins { get; set; }
 
     public int sort { get; set; }
     public long created { get; set; }
@@ -109,10 +114,18 @@ CREATE TABLE IF NOT EXISTS devices (
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT
+);
+CREATE TABLE IF NOT EXISTS profile_settings (
+    profile_id TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    updated INTEGER NOT NULL
 );");
 
             if (Scalar(db, "SELECT COUNT(*) FROM pragma_table_info('profiles') WHERE name = 'age_limit'") == 0)
                 Exec(db, "ALTER TABLE profiles ADD COLUMN age_limit INTEGER NOT NULL DEFAULT 12");
+
+            if (Scalar(db, "SELECT COUNT(*) FROM pragma_table_info('profiles') WHERE name = 'sync_plugins'") == 0)
+                Exec(db, "ALTER TABLE profiles ADD COLUMN sync_plugins INTEGER NOT NULL DEFAULT 0");
 
             if (Scalar(db, "SELECT COUNT(*) FROM accounts WHERE id = $id", ("$id", MainAccount)) == 0)
             {
@@ -189,7 +202,7 @@ CREATE TABLE IF NOT EXISTS meta (
     {
         var list = new List<HubProfile>();
         using var db = Open();
-        using var cmd = Command(db, "SELECT id, account_id, name, avatar, child, sort, created, age_limit FROM profiles WHERE account_id = $a ORDER BY sort, created", ("$a", accountId));
+        using var cmd = Command(db, "SELECT id, account_id, name, avatar, child, sort, created, age_limit, sync_plugins FROM profiles WHERE account_id = $a ORDER BY sort, created", ("$a", accountId));
         using var r = cmd.ExecuteReader();
         while (r.Read())
             list.Add(ReadProfile(r));
@@ -202,7 +215,7 @@ CREATE TABLE IF NOT EXISTS meta (
             return null;
 
         using var db = Open();
-        using var cmd = Command(db, "SELECT id, account_id, name, avatar, child, sort, created, age_limit FROM profiles WHERE id = $id", ("$id", id));
+        using var cmd = Command(db, "SELECT id, account_id, name, avatar, child, sort, created, age_limit, sync_plugins FROM profiles WHERE id = $id", ("$id", id));
         using var r = cmd.ExecuteReader();
         return r.Read() ? ReadProfile(r) : null;
     }
@@ -216,10 +229,11 @@ CREATE TABLE IF NOT EXISTS meta (
         child = r.GetInt64(4) != 0,
         sort = r.GetInt32(5),
         created = r.GetInt64(6),
-        age_limit = r.GetInt32(7)
+        age_limit = r.GetInt32(7),
+        sync_plugins = r.GetInt64(8) != 0
     };
 
-    public static HubProfile CreateProfile(string accountId, string name, string avatar, bool child, int ageLimit)
+    public static HubProfile CreateProfile(string accountId, string name, string avatar, bool child, int ageLimit, bool syncPlugins = false)
     {
         string id;
 
@@ -234,23 +248,24 @@ CREATE TABLE IF NOT EXISTS meta (
 
             long sort = Scalar(db, "SELECT COALESCE(MAX(sort), 0) + 1 FROM profiles WHERE account_id = $a", ("$a", accountId));
 
-            Exec(db, "INSERT INTO profiles (id, account_id, name, avatar, child, sort, created, age_limit) VALUES ($id, $a, $name, $avatar, $child, $sort, $now, $age)",
+            Exec(db, "INSERT INTO profiles (id, account_id, name, avatar, child, sort, created, age_limit, sync_plugins) VALUES ($id, $a, $name, $avatar, $child, $sort, $now, $age, $plugins)",
                 ("$id", id), ("$a", accountId), ("$name", name), ("$avatar", avatar ?? string.Empty),
-                ("$child", child ? 1 : 0), ("$sort", sort), ("$now", Now()), ("$age", NormalizeAge(ageLimit)));
+                ("$child", child ? 1 : 0), ("$sort", sort), ("$now", Now()), ("$age", NormalizeAge(ageLimit)), ("$plugins", syncPlugins ? 1 : 0));
         }
 
         RefreshChildren();
         return GetProfile(id);
     }
 
-    public static bool UpdateProfile(string id, string name, string avatar, bool child, int ageLimit)
+    public static bool UpdateProfile(string id, string name, string avatar, bool child, int ageLimit, bool syncPlugins)
     {
         bool ok;
         lock (_lock)
         {
             using var db = Open();
-            ok = Exec(db, "UPDATE profiles SET name = $name, avatar = $avatar, child = $child, age_limit = $age WHERE id = $id",
-                ("$id", id), ("$name", name), ("$avatar", avatar ?? string.Empty), ("$child", child ? 1 : 0), ("$age", NormalizeAge(ageLimit))) > 0;
+            ok = Exec(db, "UPDATE profiles SET name = $name, avatar = $avatar, child = $child, age_limit = $age, sync_plugins = $plugins WHERE id = $id",
+                ("$id", id), ("$name", name), ("$avatar", avatar ?? string.Empty), ("$child", child ? 1 : 0), ("$age", NormalizeAge(ageLimit)),
+                ("$plugins", syncPlugins ? 1 : 0)) > 0;
         }
 
         RefreshChildren();
@@ -304,6 +319,7 @@ CREATE TABLE IF NOT EXISTS meta (
             using var db = Open();
             Exec(db, "UPDATE devices SET profile_id = NULL WHERE profile_id = $id", ("$id", id));
             bool ok = Exec(db, "DELETE FROM profiles WHERE id = $id", ("$id", id)) > 0;
+            Exec(db, "DELETE FROM profile_settings WHERE profile_id = $id", ("$id", id));
             if (ok)
                 RefreshChildren();
             return ok;
@@ -410,6 +426,85 @@ CREATE TABLE IF NOT EXISTS meta (
             using var db = Open();
             return Exec(db, "DELETE FROM devices WHERE id = $id", ("$id", id)) > 0;
         }
+    }
+    #endregion
+
+    #region settings
+    /// <summary>Настройки Lampa профиля: JSON-объект «ключ Storage → значение» и метка изменения в мс</summary>
+    public static (string data, long updated) GetSettings(string profileId)
+    {
+        using var db = Open();
+        using var cmd = Command(db, "SELECT data, updated FROM profile_settings WHERE profile_id = $id", ("$id", profileId));
+        using var r = cmd.ExecuteReader();
+        return r.Read() ? (r.GetString(0), r.GetInt64(1)) : (null, 0);
+    }
+
+    /// <summary>
+    /// Пришедшие ключи накладываются на сохранённые, а не заменяют их: два устройства, поменявшие
+    /// разные настройки почти одновременно, не затирают друг друга. Метка строго растёт.
+    /// </summary>
+    public static long SaveSettings(string profileId, JObject incoming, bool allowPlugins)
+    {
+        if (!allowPlugins)
+            incoming.Remove("plugins");
+
+        lock (_lock)
+        {
+            using var db = Open();
+            var (old, last) = ReadSettings(db, profileId);
+
+            var merged = old ?? new JObject();
+            foreach (var prop in incoming.Properties())
+                merged[prop.Name] = prop.Value;
+
+            if (!allowPlugins)
+                merged.Remove("plugins");
+
+            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            long updated = now > last ? now : last + 1;
+
+            Exec(db, "INSERT INTO profile_settings (profile_id, data, updated) VALUES ($id, $data, $u) ON CONFLICT(profile_id) DO UPDATE SET data = excluded.data, updated = excluded.updated",
+                ("$id", profileId), ("$data", merged.ToString(Formatting.None)), ("$u", updated));
+
+            return updated;
+        }
+    }
+
+    static (JObject data, long updated) ReadSettings(SqliteConnection db, string profileId)
+    {
+        using var cmd = Command(db, "SELECT data, updated FROM profile_settings WHERE profile_id = $id", ("$id", profileId));
+        using var r = cmd.ExecuteReader();
+        if (!r.Read())
+            return (null, 0);
+
+        JObject data = null;
+        try { data = JObject.Parse(r.GetString(0)); } catch { }
+        return (data, r.GetInt64(1));
+    }
+
+    public static bool ResetSettings(string profileId)
+    {
+        lock (_lock)
+        {
+            using var db = Open();
+            return Exec(db, "DELETE FROM profile_settings WHERE profile_id = $id", ("$id", profileId)) > 0;
+        }
+    }
+
+    /// <summary>Сколько ключей сохранено и когда — для админки</summary>
+    public static Dictionary<string, (int keys, long updated)> SettingsSummary()
+    {
+        var result = new Dictionary<string, (int, long)>();
+        using var db = Open();
+        using var cmd = Command(db, "SELECT profile_id, data, updated FROM profile_settings");
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            int keys = 0;
+            try { keys = JObject.Parse(r.GetString(1)).Count; } catch { }
+            result[r.GetString(0)] = (keys, r.GetInt64(2));
+        }
+        return result;
     }
     #endregion
 

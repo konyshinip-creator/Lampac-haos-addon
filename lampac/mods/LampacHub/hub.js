@@ -12,6 +12,7 @@
   var KEY_PROFILES = 'lampachub_profiles';
   var KEY_PROMPTED = 'lampachub_prompted';
   var KEY_PIN = 'lampachub_pin';
+  var KEY_SETTINGS = 'lampachub_settings_mark';
 
   var ICON = '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-4.4 0-8 2.2-8 5v1.5c0 .3.2.5.5.5h15c.3 0 .5-.2.5-.5V19c0-2.8-3.6-5-8-5Z"/></svg>';
 
@@ -144,10 +145,10 @@
     if (profileId === '') {
       // Профиль, который стоял на устройстве, удалили в админке — пусть выберут заново
       Lampa.Storage.set('lampac_profile_id', '0');
-      if (area(data.uid, '0') !== oldArea) { resetLocalData(); reload(); return; }
+      if (area(data.uid, '0') !== oldArea) { resetLocalData(); reload(); return true; }
       updateMenu();
       if (profiles().length > 1) setTimeout(function () { pickProfile(true); }, 500);
-      return;
+      return false;
     }
 
     Lampa.Storage.set('lampac_profile_id', profileId);
@@ -156,7 +157,9 @@
     if (area(data.uid, profileId) !== oldArea) {
       resetLocalData();
       reload();
+      return true;
     }
+    return false;
   }
 
   function refresh() {
@@ -164,8 +167,9 @@
 
     request('GET', '/hub/device/me', { hub_token: token() }, function (status, data) {
       if (status === 200 && data && data.status === 'ok') {
-        apply(data, false);
+        var reloading = apply(data, false);
         loadSync();
+        if (!reloading) pullSettings();
       }
       else if (status === 401) {
         logout(true);
@@ -241,8 +245,9 @@
           if (st === 200 && res && res.status === 'ok') {
             close();
             Lampa.Noty.show('Устройство подключено к LampacHub');
-            apply(res, true);
+            var reloading = apply(res, true);
             loadSync();
+            if (!reloading) pullSettings();
           }
           else if (st === 404) {
             statusLine.text('Код истёк. Закройте окно и запросите новый.');
@@ -359,6 +364,126 @@
         if (token()) guardChild(function () { logout(false); });
         else Lampa.Noty.show('Устройство не подключено');
       }
+    });
+  }
+
+  // --- настройки профиля ----------------------------------------------------
+  /**
+   * Настройки Lampa общие для всех устройств профиля. Берём всё, что Lampa и плагины регистрируют
+   * как параметры настроек (Lampa.Params.values), кроме того, что зависит от экрана и железа:
+   * плеер, размер интерфейса, навигация, кеш. Плагины — только если это включено у профиля.
+   * Значения передаются как есть, строками из localStorage.
+   */
+  var SETTINGS_EXTRA = ['language', 'cub_theme', 'menu_sort', 'menu_hide'];
+  var SETTINGS_LOCAL = /^(player|lampac|lampachub|account|cloud_|internal_torrclient|infuse_|tmdb_proxy|proxy_tmdb)/;
+  var SETTINGS_LOCAL_KEYS = ['interface_size', 'navigation_type', 'keyboard_type', 'scroll_type', 'light_version',
+    'hide_outside_the_screen', 'animation', 'advanced_animation', 'request_caching', 'cache_images', 'pages_save_total',
+    'protocol', 'device_name', 'cub_domain', 'plugins', 'favorite', 'file_view'];
+
+  var settings = { ready: false, plugins: false, applying: false, dirty: {}, timer: null };
+
+  function syncedSetting(key) {
+    if (!key || typeof key !== 'string') return false;
+    if (key === 'plugins') return settings.plugins;
+    if (SETTINGS_LOCAL.test(key) || SETTINGS_LOCAL_KEYS.indexOf(key) >= 0) return false;
+    if (SETTINGS_EXTRA.indexOf(key) >= 0) return true;
+    var values = Lampa.Params && Lampa.Params.values;
+    return !!(values && values.hasOwnProperty(key));
+  }
+
+  function settingKeys() {
+    var keys = SETTINGS_EXTRA.slice();
+    var values = (Lampa.Params && Lampa.Params.values) || {};
+    for (var k in values) if (values.hasOwnProperty(k) && keys.indexOf(k) < 0) keys.push(k);
+    if (settings.plugins) keys.push('plugins');
+    return keys.filter(syncedSetting);
+  }
+
+  function settingsArea() { return area(Lampa.Storage.get('lampac_unic_id', ''), currentProfileId()); }
+
+  function settingsMark() {
+    var m = Lampa.Storage.get(KEY_SETTINGS, '{}');
+    return m && typeof m === 'object' && m.area === settingsArea() ? (m.updated || 0) : 0;
+  }
+
+  function setSettingsMark(updated) {
+    Lampa.Storage.set(KEY_SETTINGS, { area: settingsArea(), updated: updated });
+  }
+
+  function rawSetting(key) {
+    try { return window.localStorage.getItem(key); } catch (e) { return null; }
+  }
+
+  function writeSetting(key, raw) {
+    var value = raw;
+    var c = raw.charAt(0);
+    if (c === '{' || c === '[') {
+      try { value = JSON.parse(raw); } catch (e) { value = raw; }
+    }
+    Lampa.Storage.set(key, value, true);
+  }
+
+  function pushSettings(all) {
+    if (!token()) return;
+    var keys = all ? settingKeys() : Object.keys(settings.dirty).filter(syncedSetting);
+    settings.dirty = {};
+
+    var data = {};
+    keys.forEach(function (k) {
+      var raw = rawSetting(k);
+      if (raw !== null) data[k] = raw;
+    });
+    if (!Object.keys(data).length) return;
+
+    request('POST', '/hub/device/settings', { hub_token: token(), profile_id: currentProfileId() || '0', data: JSON.stringify(data) }, function (status, res) {
+      if (status === 200 && res && res.updated) setSettingsMark(res.updated);
+    });
+  }
+
+  function pullSettings() {
+    if (!token()) return;
+
+    request('GET', '/hub/device/settings', { hub_token: token(), profile_id: currentProfileId() || '0' }, function (status, res) {
+      if (status !== 200 || !res || res.status !== 'ok') return;
+
+      settings.plugins = !!res.plugins;
+      settings.ready = true;
+
+      // Профиль ещё без настроек — сохраняем настройки этого устройства
+      if (!res.data || !res.updated) { pushSettings(true); return; }
+      if (res.updated <= settingsMark()) return;
+
+      var changed = [];
+      settings.applying = true;
+      try {
+        for (var k in res.data) {
+          if (!res.data.hasOwnProperty(k) || !syncedSetting(k)) continue;
+          var raw = res.data[k];
+          if (typeof raw !== 'string') raw = JSON.stringify(raw);
+          if (rawSetting(k) === raw) continue;
+          writeSetting(k, raw);
+          changed.push(k);
+        }
+      } finally {
+        settings.applying = false;
+      }
+
+      setSettingsMark(res.updated);
+
+      // Язык, тема и плагины применяются только при запуске Lampa
+      if (changed.length) {
+        Lampa.Noty.show('LampacHub: применены настройки профиля');
+        reload();
+      }
+    });
+  }
+
+  function watchSettings() {
+    Lampa.Storage.listener.follow('change', function (e) {
+      if (!settings.ready || settings.applying || !token() || !e || !syncedSetting(e.name)) return;
+      settings.dirty[e.name] = true;
+      clearTimeout(settings.timer);
+      settings.timer = setTimeout(function () { pushSettings(false); }, 2500);
     });
   }
 
@@ -608,6 +733,7 @@
     addSettings();
     addMenu();
     startChildMode();
+    watchSettings();
 
     // Sync предпочитает account_email (вход в CUB) идентичности uid — профили LampacHub тогда не работают
     if (token() && Lampa.Storage.get('account_email', ''))

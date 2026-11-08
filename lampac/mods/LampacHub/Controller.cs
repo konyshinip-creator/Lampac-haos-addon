@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Shared;
 using Shared.Attributes;
 using System;
@@ -176,6 +177,72 @@ public class HubDeviceController : BaseController
         return PhysicalFile(Path.GetFullPath(path), type);
     }
 
+    /// <summary>Устройство и профиль одного аккаунта — иначе null</summary>
+    (HubDevice device, HubProfile profile) DeviceProfileOf(string hub_token, string profile_id)
+    {
+        var device = HubStore.FindDevice(hub_token);
+        if (device == null)
+            return (null, null);
+
+        var profile = HubStore.GetProfile(string.IsNullOrEmpty(profile_id) ? HubStore.MainProfile : profile_id);
+        if (profile == null || profile.account_id != device.account_id)
+            return (device, null);
+
+        return (device, profile);
+    }
+
+    /// <summary>Настройки Lampa профиля (язык, тема, интерфейс, источники; плагины — если включено у профиля)</summary>
+    [HttpGet, AllowAnonymous]
+    [Route("hub/device/settings")]
+    public ActionResult GetSettings(string hub_token, string profile_id)
+    {
+        if (Off)
+            return NotFound();
+
+        var (device, profile) = DeviceProfileOf(hub_token, profile_id);
+        if (device == null)
+            return Reply(new { status = "revoked" }, 401);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        var (data, updated) = HubStore.GetSettings(profile.id);
+        JObject obj = null;
+        if (data != null)
+        {
+            try { obj = JObject.Parse(data); } catch { }
+        }
+
+        if (obj != null && !profile.sync_plugins)
+            obj.Remove("plugins");
+
+        return Reply(new { status = "ok", updated, plugins = profile.sync_plugins, data = obj });
+    }
+
+    [HttpPost, AllowAnonymous]
+    [RequestSizeLimit(2_000_000)]
+    [Route("hub/device/settings")]
+    public ActionResult SaveSettings(string hub_token, string profile_id, string data)
+    {
+        if (Off)
+            return NotFound();
+
+        var (device, profile) = DeviceProfileOf(hub_token, profile_id);
+        if (device == null)
+            return Reply(new { status = "revoked" }, 401);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        if (string.IsNullOrEmpty(data) || data.Length > 1_000_000)
+            return Reply(new { error = "Пустые или слишком большие настройки" }, 400);
+
+        JObject obj;
+        try { obj = JObject.Parse(data); }
+        catch { return Reply(new { error = "Неверный формат" }, 400); }
+
+        long updated = HubStore.SaveSettings(profile.id, obj, profile.sync_plugins);
+        return Reply(new { status = "ok", updated, plugins = profile.sync_plugins });
+    }
+
     [HttpPost, AllowAnonymous]
     [Route("hub/device/profile")]
     public ActionResult DeviceProfile(string hub_token, string profile_id)
@@ -251,6 +318,7 @@ public class HubAdminController : BaseController
 
         var account = HubStore.GetAccount(HubStore.MainAccount);
         var profiles = HubStore.ListProfiles(HubStore.MainAccount);
+        var settings = HubStore.SettingsSummary();
         var now = DateTime.UtcNow;
 
         return Reply(new
@@ -261,6 +329,7 @@ public class HubAdminController : BaseController
             profiles,
             presets = HubAvatars.Presets(),
             pin = HubStore.HasPin,
+            settings = settings.ToDictionary(i => i.Key, i => new { keys = i.Value.keys, updated = i.Value.updated }),
             devices = HubStore.ListDevices(),
             pending = DeviceCodes.Pending().Select(p => new
             {
@@ -305,7 +374,7 @@ public class HubAdminController : BaseController
     [HttpPost]
     [Authorization(accessDeniedMessage: "unauthorized")]
     [Route("hub/api/profile/save")]
-    public ActionResult SaveProfile(string id, string name, string avatar, bool child, int age_limit = 12)
+    public ActionResult SaveProfile(string id, string name, string avatar, bool child, int age_limit = 12, bool sync_plugins = false)
     {
         if (Off)
             return NotFound();
@@ -320,7 +389,7 @@ public class HubAdminController : BaseController
             return Reply(new { error = "Укажите имя профиля" }, 400);
 
         if (string.IsNullOrEmpty(id))
-            return Reply(new { status = "ok", profile = HubStore.CreateProfile(HubStore.MainAccount, name, avatar, child, age_limit) });
+            return Reply(new { status = "ok", profile = HubStore.CreateProfile(HubStore.MainAccount, name, avatar, child, age_limit, sync_plugins) });
 
         var profile = HubStore.GetProfile(id);
         if (profile == null || profile.account_id != HubStore.MainAccount)
@@ -329,7 +398,7 @@ public class HubAdminController : BaseController
         if (profile.avatar != avatar)
             HubAvatars.DeleteUploaded(profile.avatar);
 
-        HubStore.UpdateProfile(id, name, avatar, child, age_limit);
+        HubStore.UpdateProfile(id, name, avatar, child, age_limit, sync_plugins);
         return Reply(new { status = "ok", profile = HubStore.GetProfile(id) });
     }
 
@@ -376,6 +445,26 @@ public class HubAdminController : BaseController
 
         HubStore.SetPin(pin);
         return Reply(new { status = "ok", pin = pin.Length != 0 });
+    }
+
+    /// <summary>Забыть сохранённые настройки профиля: следующее устройство профиля отправит свои</summary>
+    [HttpPost]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/profile/settings/reset")]
+    public ActionResult ResetSettings(string id)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        var profile = HubStore.GetProfile(id);
+        if (profile == null || profile.account_id != HubStore.MainAccount)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        HubStore.ResetSettings(profile.id);
+        return Reply(new { status = "ok" });
     }
 
     [HttpPost]
