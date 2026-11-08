@@ -32,6 +32,7 @@ XHAMSTER_HOST=$(opt_get xhamster_host "https://ua.xhamster2.com")
 ENABLE_MONITOR=$(opt_get enable_monitor true)
 MONITOR_INTERVAL=$(opt_get monitor_interval 10)
 MONITOR_WEBHOOK=$(opt_get monitor_webhook "")
+ENABLE_HUB=$(opt_get enable_hub false)
 
 [ -z "$PORT" ] && PORT=9118
 [ -z "$TIMEZONE" ] && TIMEZONE="Europe/Kiev"
@@ -133,7 +134,9 @@ done
 # --- Модули из папки mods/ этого репозитория -------------------------------
 #     Hentasis и HentaiUkr (18+, раздел SISI) — опции enable_hentasis и
 #     enable_hentaiukr; зеркало встроенного Xhamster — xhamster_host; монитор доступности
-#     источников — enable_monitor / monitor_interval / monitor_webhook.
+#     источников — enable_monitor / monitor_interval / monitor_webhook; LampacHub
+#     (профили и вход устройств по коду) — enable_hub, плагин hub.js при этом
+#     подключается в Lampa через LampaWeb.customPlugins.
 tmp="$(mktemp)"
 jq --argjson hentasis "$( [ "$ENABLE_HENTASIS" = "false" ] && echo false || echo true )" \
    --argjson hentaiukr "$( [ "$ENABLE_HENTAIUKR" = "false" ] && echo false || echo true )" \
@@ -141,11 +144,17 @@ jq --argjson hentasis "$( [ "$ENABLE_HENTASIS" = "false" ] && echo false || echo
    --argjson monitor "$( [ "$ENABLE_MONITOR" = "false" ] && echo false || echo true )" \
    --argjson interval "$MONITOR_INTERVAL" \
    --arg webhook "$MONITOR_WEBHOOK" \
+   --argjson hub "$( [ "$ENABLE_HUB" = "true" ] && echo true || echo false )" \
    '.Hentasis = ((.Hentasis // {}) + {enable: $hentasis})
     | .HentaiUkr = ((.HentaiUkr // {}) + {enable: $hentaiukr})
     | if $xhamster == "" then . else .Xhamster = ((.Xhamster // {}) + {host: $xhamster}) end
     | .AnimeMonitor = ((.AnimeMonitor // {}) + {enable: $monitor, interval: $interval})
-    | if $webhook == "" then .AnimeMonitor |= del(.webhook) else .AnimeMonitor.webhook = $webhook end' \
+    | if $webhook == "" then .AnimeMonitor |= del(.webhook) else .AnimeMonitor.webhook = $webhook end
+    | .LampacHub = ((.LampacHub // {}) + {enable: $hub})
+    | (((.LampaWeb.customPlugins // []) | map(select((.url // "") | endswith("/hub.js") | not))) as $other
+       | if $hub then .LampaWeb = ((.LampaWeb // {}) + {customPlugins: ($other + [{url: "{localhost}/hub.js", status: 1, name: "LampacHub", author: "lampac-haos-addon"}])})
+         elif ((.LampaWeb.customPlugins // []) | length) != ($other | length) then .LampaWeb.customPlugins = $other
+         else . end)' \
    "$CONF_DIR/init.conf" > "$tmp" && mv "$tmp" "$CONF_DIR/init.conf"
 
 # --- Произвольные overrides (глубокое слияние, приоритет у EXTRA_JSON) ------
