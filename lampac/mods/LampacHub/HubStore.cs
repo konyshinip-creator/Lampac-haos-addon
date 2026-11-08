@@ -33,6 +33,10 @@ public class HubProfile
     public string name { get; set; }
     public string avatar { get; set; }
     public bool child { get; set; }
+
+    /// <summary>Возрастной лимит детского профиля: 0, 6, 12 или 16</summary>
+    public int age_limit { get; set; } = 12;
+
     public int sort { get; set; }
     public long created { get; set; }
 }
@@ -107,6 +111,9 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT
 );");
 
+            if (Scalar(db, "SELECT COUNT(*) FROM pragma_table_info('profiles') WHERE name = 'age_limit'") == 0)
+                Exec(db, "ALTER TABLE profiles ADD COLUMN age_limit INTEGER NOT NULL DEFAULT 12");
+
             if (Scalar(db, "SELECT COUNT(*) FROM accounts WHERE id = $id", ("$id", MainAccount)) == 0)
             {
                 Exec(db, "INSERT INTO accounts (id, name, uid, created) VALUES ($id, $name, '', $now)",
@@ -120,6 +127,7 @@ CREATE TABLE IF NOT EXISTS meta (
             }
         }
 
+        RefreshChildren();
         Ready = true;
     }
     #endregion
@@ -181,7 +189,7 @@ CREATE TABLE IF NOT EXISTS meta (
     {
         var list = new List<HubProfile>();
         using var db = Open();
-        using var cmd = Command(db, "SELECT id, account_id, name, avatar, child, sort, created FROM profiles WHERE account_id = $a ORDER BY sort, created", ("$a", accountId));
+        using var cmd = Command(db, "SELECT id, account_id, name, avatar, child, sort, created, age_limit FROM profiles WHERE account_id = $a ORDER BY sort, created", ("$a", accountId));
         using var r = cmd.ExecuteReader();
         while (r.Read())
             list.Add(ReadProfile(r));
@@ -194,7 +202,7 @@ CREATE TABLE IF NOT EXISTS meta (
             return null;
 
         using var db = Open();
-        using var cmd = Command(db, "SELECT id, account_id, name, avatar, child, sort, created FROM profiles WHERE id = $id", ("$id", id));
+        using var cmd = Command(db, "SELECT id, account_id, name, avatar, child, sort, created, age_limit FROM profiles WHERE id = $id", ("$id", id));
         using var r = cmd.ExecuteReader();
         return r.Read() ? ReadProfile(r) : null;
     }
@@ -207,10 +215,11 @@ CREATE TABLE IF NOT EXISTS meta (
         avatar = r.IsDBNull(3) ? string.Empty : r.GetString(3),
         child = r.GetInt64(4) != 0,
         sort = r.GetInt32(5),
-        created = r.GetInt64(6)
+        created = r.GetInt64(6),
+        age_limit = r.GetInt32(7)
     };
 
-    public static HubProfile CreateProfile(string accountId, string name, string avatar, bool child)
+    public static HubProfile CreateProfile(string accountId, string name, string avatar, bool child, int ageLimit)
     {
         string id;
 
@@ -225,22 +234,63 @@ CREATE TABLE IF NOT EXISTS meta (
 
             long sort = Scalar(db, "SELECT COALESCE(MAX(sort), 0) + 1 FROM profiles WHERE account_id = $a", ("$a", accountId));
 
-            Exec(db, "INSERT INTO profiles (id, account_id, name, avatar, child, sort, created) VALUES ($id, $a, $name, $avatar, $child, $sort, $now)",
+            Exec(db, "INSERT INTO profiles (id, account_id, name, avatar, child, sort, created, age_limit) VALUES ($id, $a, $name, $avatar, $child, $sort, $now, $age)",
                 ("$id", id), ("$a", accountId), ("$name", name), ("$avatar", avatar ?? string.Empty),
-                ("$child", child ? 1 : 0), ("$sort", sort), ("$now", Now()));
+                ("$child", child ? 1 : 0), ("$sort", sort), ("$now", Now()), ("$age", NormalizeAge(ageLimit)));
         }
 
+        RefreshChildren();
         return GetProfile(id);
     }
 
-    public static bool UpdateProfile(string id, string name, string avatar, bool child)
+    public static bool UpdateProfile(string id, string name, string avatar, bool child, int ageLimit)
+    {
+        bool ok;
+        lock (_lock)
+        {
+            using var db = Open();
+            ok = Exec(db, "UPDATE profiles SET name = $name, avatar = $avatar, child = $child, age_limit = $age WHERE id = $id",
+                ("$id", id), ("$name", name), ("$avatar", avatar ?? string.Empty), ("$child", child ? 1 : 0), ("$age", NormalizeAge(ageLimit))) > 0;
+        }
+
+        RefreshChildren();
+        return ok;
+    }
+
+    public static bool SetAvatar(string id, string avatar)
     {
         lock (_lock)
         {
             using var db = Open();
-            return Exec(db, "UPDATE profiles SET name = $name, avatar = $avatar, child = $child WHERE id = $id",
-                ("$id", id), ("$name", name), ("$avatar", avatar ?? string.Empty), ("$child", child ? 1 : 0)) > 0;
+            return Exec(db, "UPDATE profiles SET avatar = $avatar WHERE id = $id", ("$id", id), ("$avatar", avatar ?? string.Empty)) > 0;
         }
+    }
+
+    public static int NormalizeAge(int age)
+    {
+        if (age >= 16) return 16;
+        if (age >= 12) return 12;
+        if (age >= 6) return 6;
+        return 0;
+    }
+
+    static volatile HashSet<string> _children = new HashSet<string>();
+
+    /// <summary>Детский профиль: по нему middleware закрывает раздел 18+. Читается на каждый запрос, поэтому из памяти.</summary>
+    public static bool IsChild(string profileId)
+        => !string.IsNullOrEmpty(profileId) && _children.Contains(profileId);
+
+    static void RefreshChildren()
+    {
+        var set = new HashSet<string>();
+        using (var db = Open())
+        using (var cmd = Command(db, "SELECT id FROM profiles WHERE child = 1"))
+        using (var r = cmd.ExecuteReader())
+        {
+            while (r.Read())
+                set.Add(r.GetString(0));
+        }
+        _children = set;
     }
 
     /// <summary>Закладки и история профиля остаются в базе Sync/TimeCode, удаляется только запись профиля</summary>
@@ -253,7 +303,10 @@ CREATE TABLE IF NOT EXISTS meta (
         {
             using var db = Open();
             Exec(db, "UPDATE devices SET profile_id = NULL WHERE profile_id = $id", ("$id", id));
-            return Exec(db, "DELETE FROM profiles WHERE id = $id", ("$id", id)) > 0;
+            bool ok = Exec(db, "DELETE FROM profiles WHERE id = $id", ("$id", id)) > 0;
+            if (ok)
+                RefreshChildren();
+            return ok;
         }
     }
     #endregion
@@ -357,6 +410,42 @@ CREATE TABLE IF NOT EXISTS meta (
             using var db = Open();
             return Exec(db, "DELETE FROM devices WHERE id = $id", ("$id", id)) > 0;
         }
+    }
+    #endregion
+
+    #region pin
+    /// <summary>PIN выхода из детского профиля, общий на аккаунт. Хранится как SHA-256 с солью.</summary>
+    public static bool HasPin => !string.IsNullOrEmpty(GetMeta("pin"));
+
+    public static void SetPin(string pin)
+    {
+        lock (_lock)
+        {
+            if (string.IsNullOrEmpty(pin))
+            {
+                SetMeta("pin", string.Empty);
+                return;
+            }
+
+            string salt = RandomId(16);
+            SetMeta("pin", salt + ":" + Hash(salt + pin));
+        }
+    }
+
+    public static bool CheckPin(string pin)
+    {
+        string stored = GetMeta("pin");
+        if (string.IsNullOrEmpty(stored))
+            return true;
+
+        int i = stored.IndexOf(':');
+        if (i < 0 || string.IsNullOrEmpty(pin))
+            return false;
+
+        string salt = stored.Substring(0, i);
+        byte[] a = Encoding.UTF8.GetBytes(stored.Substring(i + 1));
+        byte[] b = Encoding.UTF8.GetBytes(Hash(salt + pin));
+        return CryptographicOperations.FixedTimeEquals(a, b);
     }
     #endregion
 

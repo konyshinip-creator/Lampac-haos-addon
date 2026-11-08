@@ -109,7 +109,7 @@ jobs:
               echo "::error::module $m не загрузился"; FAIL=1
             fi
           done
-          for r in lite/senku lite/anistar lite/animaunt lite/animefox lite/anitokyo hentasis hentaiukr animemon/status hub.js hub/auth; do
+          for r in lite/senku lite/anistar lite/animaunt lite/animefox lite/anitokyo hentasis hentaiukr animemon/status hub.js hub/auth hub/avatars/01-cat.svg; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "http://127.0.0.1:9118/$r" || true)
             echo "/$r -> $code"
             # 503 — штатный ответ модуля на запрос без title (OnError), роут жив

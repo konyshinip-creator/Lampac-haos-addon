@@ -11,6 +11,7 @@
   var KEY_ACCOUNT = 'lampachub_account';
   var KEY_PROFILES = 'lampachub_profiles';
   var KEY_PROMPTED = 'lampachub_prompted';
+  var KEY_PIN = 'lampachub_pin';
 
   var ICON = '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-4.4 0-8 2.2-8 5v1.5c0 .3.2.5.5.5h15c.3 0 .5-.2.5-.5V19c0-2.8-3.6-5-8-5Z"/></svg>';
 
@@ -94,10 +95,27 @@
     setTimeout(function () { window.location.reload(); }, 800);
   }
 
+  /** Адрес картинки аватара или null, если аватар — эмодзи/буква */
+  function avatarSrc(a) {
+    if (!a) return null;
+    if (/^https?:\/\//i.test(a)) return a;
+    if (a.charAt(0) === '/') return HOST + a;
+    return null;
+  }
+
   function profileLabel(p) {
     if (!p) return '';
-    var avatar = p.avatar && !/^https?:\/\//i.test(p.avatar) ? p.avatar + ' ' : '';
-    return avatar + p.name;
+    var emoji = p.avatar && !avatarSrc(p.avatar) ? p.avatar + ' ' : '';
+    return emoji + p.name;
+  }
+
+  function currentProfile() { return findProfile(currentProfileId() || '0'); }
+
+  /** Возрастной лимит текущего профиля или -1, если профиль не детский */
+  function childLimit() {
+    if (!token()) return -1;
+    var p = currentProfile();
+    return p && p.child ? (typeof p.age_limit === 'number' ? p.age_limit : 12) : -1;
   }
 
   // --- вход / выход ---------------------------------------------------------
@@ -112,6 +130,7 @@
     Lampa.Storage.set(KEY_TOKEN, data.token);
     Lampa.Storage.set(KEY_ACCOUNT, data.account ? data.account.name : '');
     Lampa.Storage.set(KEY_PROFILES, data.profiles || []);
+    Lampa.Storage.set(KEY_PIN, !!data.pin);
 
     if (data.uid && Lampa.Storage.get('lampac_unic_id', '') !== data.uid)
       Lampa.Storage.set('lampac_unic_id', data.uid);
@@ -162,6 +181,7 @@
     Lampa.Storage.set(KEY_TOKEN, '');
     Lampa.Storage.set(KEY_PROFILES, []);
     Lampa.Storage.set(KEY_ACCOUNT, '');
+    Lampa.Storage.set(KEY_PIN, false);
     Lampa.Storage.set('lampac_profile_id', '');
     resetLocalData();
     Lampa.Noty.show(revoked ? 'Устройство отключено от LampacHub в админке' : 'Вы вышли из LampacHub');
@@ -270,7 +290,11 @@
       }),
       onSelect: function (item) {
         Lampa.Controller.toggle(previous);
-        if (item.profile !== current || forced) setProfile(item.profile);
+        if (item.profile === current && !forced) return;
+        var target = findProfile(item.profile);
+        // С детского профиля на взрослый — только по PIN; между детскими и на детский — свободно
+        if (target && target.child) setProfile(item.profile);
+        else guardChild(function () { setProfile(item.profile); });
       },
       onBack: function () {
         Lampa.Controller.toggle(previous);
@@ -286,7 +310,13 @@
   }
 
   function updateMenu() {
-    if (menuItem) menuItem.find('.menu__text').text(menuText());
+    if (!menuItem) return;
+    menuItem.find('.menu__text').text(menuText());
+    var p = token() ? currentProfile() : null;
+    var src = p ? avatarSrc(p.avatar) : null;
+    var ico = menuItem.find('.menu__ico');
+    if (src) ico.html('<img src="' + src.replace(/"/g, '&quot;') + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover" alt="">');
+    else ico.html(ICON);
   }
 
   function addMenu() {
@@ -326,10 +356,164 @@
       param: { name: 'lampachub_logout', type: 'button' },
       field: { name: 'Выйти', description: 'Отключить это устройство от LampacHub' },
       onChange: function () {
-        if (token()) logout(false);
+        if (token()) guardChild(function () { logout(false); });
         else Lampa.Noty.show('Устройство не подключено');
       }
     });
+  }
+
+  // --- PIN ------------------------------------------------------------------
+  /** Выход из детского профиля: если в админке задан PIN, сначала спросить его и проверить на сервере */
+  function guardChild(next) {
+    if (childLimit() < 0 || !Lampa.Storage.get(KEY_PIN, false)) { next(); return; }
+
+    var previous = Lampa.Controller.enabled().name;
+    Lampa.Input.edit({ title: 'PIN для выхода из детского профиля', value: '', free: true, nosave: true }, function (value) {
+      Lampa.Controller.toggle(previous);
+      value = String(value || '').trim();
+      if (!value) return;
+      request('POST', '/hub/device/pin', { hub_token: token(), pin: value }, function (status, res) {
+        if (status === 200 && res && res.ok) next();
+        else Lampa.Noty.show((res && res.error) || 'Не удалось проверить PIN');
+      });
+    });
+  }
+
+  // --- детский профиль ------------------------------------------------------
+  var HORROR = 27, THRILLER = 53;
+
+  function blockedGenres(limit) { return limit < 16 ? [HORROR, THRILLER] : []; }
+
+  function allowedItem(item, limit) {
+    if (!item || typeof item !== 'object') return true;
+    if (item.adult) return false;
+    var bad = blockedGenres(limit);
+    var genres = item.genre_ids || (item.genres || []).map(function (g) { return g && g.id; });
+    for (var i = 0; i < genres.length; i++) if (bad.indexOf(genres[i]) >= 0) return false;
+    return true;
+  }
+
+  function isTmdbUrl(url) {
+    return typeof url === 'string' && (url.indexOf('api.themoviedb.org') >= 0 || url.indexOf('/tmdb/api') >= 0 || url.indexOf('/tmdb/api.themoviedb.org') >= 0);
+  }
+
+  /** Сертификат TMDB → возраст. RU даёт «16+», США — PG-13, TV-14 и т.п. */
+  function certAge(cert) {
+    var c = String(cert || '').toUpperCase().replace(/\s+/g, '');
+    if (!c) return null;
+    var m = /^(\d{1,2})\+?$/.exec(c);
+    if (m) return parseInt(m[1], 10);
+    var map = { 'G': 0, 'TV-Y': 0, 'TV-G': 0, 'TV-Y7': 7, 'PG': 8, 'TV-PG': 10, 'PG-13': 13, 'TV-14': 14, 'R': 17, 'TV-MA': 17, 'NC-17': 18 };
+    return map.hasOwnProperty(c) ? map[c] : null;
+  }
+
+  function ratingAge(data, tv) {
+    var list = (data && data.results) || [];
+    var order = ['RU', 'US', 'DE', 'GB', 'FR'];
+    for (var o = 0; o < order.length; o++) {
+      for (var i = 0; i < list.length; i++) {
+        var r = list[i];
+        if (r.iso_3166_1 !== order[o]) continue;
+        if (tv) { var a = certAge(r.rating); if (a !== null) return a; }
+        else {
+          var best = null;
+          (r.release_dates || []).forEach(function (d) { var x = certAge(d.certification); if (x !== null && (best === null || x > best)) best = x; });
+          if (best !== null) return best;
+        }
+      }
+    }
+    return null;
+  }
+
+  var MPAA = { 0: 'G', 6: 'PG', 12: 'PG-13', 16: 'R' };
+
+  /** discover у TMDB умеет фильтровать по рейтингу сам; остальным запросам — только include_adult=false */
+  function childTmdbUrl(url) {
+    var limit = childLimit();
+    if (limit < 0 || typeof url !== 'string') return url;
+    if (url.indexOf('include_adult=') < 0) url = Lampa.Utils.addUrlComponent(url, 'include_adult=false');
+    if (/discover\/movie/.test(url) && url.indexOf('certification') < 0)
+      url = Lampa.Utils.addUrlComponent(url, 'certification_country=US&certification.lte=' + encodeURIComponent(MPAA[limit] || 'PG-13'));
+    return url;
+  }
+
+  function wrapTmdb() {
+    if (!Lampa.TMDB || typeof Lampa.TMDB.api !== 'function' || Lampa.TMDB.api.lampachub) return;
+    var original = Lampa.TMDB.api;
+    var wrapped = function () { return childTmdbUrl(original.apply(this, arguments)); };
+    wrapped.lampachub = true;
+    Lampa.TMDB.api = wrapped;
+  }
+
+  /** Ответы TMDB со списками: убираем 18+ и жанры, закрытые лимитом. Сетевые запросы Lampa идут через $.ajax. */
+  function wrapAjax() {
+    if (!window.$ || !$.ajax || $.ajax.lampachub) return;
+    var original = $.ajax;
+    var wrapped = function (options) {
+      try {
+        var limit = childLimit();
+        var opts = typeof options === 'object' ? options : arguments[1];
+        if (limit >= 0 && opts && isTmdbUrl(opts.url || options) && typeof opts.success === 'function') {
+          var success = opts.success;
+          opts.success = function (data) {
+            try {
+              if (data && Array.isArray(data.results)) data.results = data.results.filter(function (i) { return allowedItem(i, limit); });
+            } catch (e) { }
+            return success.apply(this, arguments);
+          };
+        }
+      } catch (e) { }
+      return original.apply(this, arguments);
+    };
+    for (var k in original) if (original.hasOwnProperty(k)) wrapped[k] = original[k];
+    wrapped.lampachub = true;
+    $.ajax = wrapped;
+  }
+
+  function blockCard(reason) {
+    Lampa.Noty.show('Недоступно в детском профиле' + (reason ? ' (' + reason + ')' : ''));
+    try { Lampa.Activity.backward(); } catch (e) { }
+  }
+
+  /** Открытая карточка: 18+ и рейтинг выше лимита закрываются сразу */
+  function guardCards() {
+    Lampa.Listener.follow('full', function (e) {
+      var limit = childLimit();
+      if (limit < 0 || e.type !== 'complite' || !e.data || !e.data.movie) return;
+
+      var movie = e.data.movie;
+      if (!allowedItem(movie, limit)) { blockCard(movie.adult ? '18+' : 'жанр'); return; }
+
+      var tv = !!(movie.name || movie.first_air_date || (e.object && e.object.method === 'tv'));
+      var embedded = tv ? movie.content_ratings : movie.release_dates;
+      var check = function (data) {
+        var age = ratingAge(data, tv);
+        if (age !== null && age > limit) blockCard(age + '+');
+      };
+
+      if (embedded) { check(embedded); return; }
+      if (!movie.id || !Lampa.TMDB || !Lampa.TMDB.key) return;
+
+      var url = Lampa.TMDB.api((tv ? 'tv/' : 'movie/') + movie.id + '/' + (tv ? 'content_ratings' : 'release_dates') + '?api_key=' + Lampa.TMDB.key());
+      try {
+        var net = new Lampa.Reguest();
+        net.silent(url, check, function () { });
+      } catch (err) { }
+    });
+  }
+
+  function hideAdultMenu() {
+    if (childLimit() < 0) return;
+    $('.menu [data-action="sisi"]').remove();
+  }
+
+  function startChildMode() {
+    wrapAjax();
+    wrapTmdb();
+    guardCards();
+    hideAdultMenu();
+    // Плагины грузятся параллельно: TMDB Proxy может переопределить TMDB.api, а sisi.js — добавить пункт меню позже
+    setInterval(function () { wrapTmdb(); hideAdultMenu(); }, 1500);
   }
 
   /** Закладки и тайм-коды идут через стандартные плагины Lampac; оба сами защищены от двойной загрузки */
@@ -345,6 +529,7 @@
   function start() {
     addSettings();
     addMenu();
+    startChildMode();
 
     // Sync предпочитает account_email (вход в CUB) идентичности uid — профили LampacHub тогда не работают
     if (token() && Lampa.Storage.get('account_email', ''))
