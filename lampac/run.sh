@@ -161,6 +161,20 @@ fi
 ln -snf "$CONF_DIR/init.conf" "$LAMPAC_HOME/init.conf"
 ln -snf "$CONF_DIR/passwd" "$LAMPAC_HOME/passwd"
 
+# --- Пользовательские данные Lampac (database/) -----------------------------
+# Закладки (Sync.sql), позиции просмотра (TimeCode.sql), Storage, Tracks и
+# т.п. Lampac пишет в /lampac/database. Внутри контейнера эта папка
+# пересоздаётся при каждом обновлении аддона, поэтому держим её в /config:
+# так данные переживают обновления и попадают в бэкап Home Assistant.
+# Файлы, которые уже есть в образе, копируются один раз и не перезаписывают
+# существующие в /config.
+mkdir -p "$CONF_DIR/database"
+if [ -d "$LAMPAC_HOME/database" ] && [ ! -L "$LAMPAC_HOME/database" ]; then
+  cp -an "$LAMPAC_HOME/database/." "$CONF_DIR/database/" 2>/dev/null || true
+  rm -rf "$LAMPAC_HOME/database"
+fi
+ln -snf "$CONF_DIR/database" "$LAMPAC_HOME/database"
+
 # ---------------------------------------------------------------------------
 # AdminPanel — отдельный механизм (manifest.json в каталоге модуля, а не
 # SkipModules). Включает встроенную веб-админку Lampac на /adminpanel/, где

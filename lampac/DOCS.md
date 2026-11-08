@@ -195,6 +195,9 @@ Samba share или Studio Code Server):
 - `init.conf` — основной конфиг Lampac
 - `passwd` — пароль root
 - `module/AdminPanel/manifest.json` — состояние встроенной админки
+- `database/` — данные пользователей Lampac: закладки (`Sync.sql`),
+  позиции просмотра (`TimeCode.sql`), `storage/` и др. Переживают
+  обновления аддона и попадают в бэкап Home Assistant
 
 Файлы создаются один раз при первом запуске и дальше только патчатся
 аддоном по опциям — ручные правки (в т.ч. из `/adminpanel/`) не теряются.
