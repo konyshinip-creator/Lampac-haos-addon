@@ -122,6 +122,32 @@ jobs:
           echo "/hub/api/state с паролем -> $code"; [ "$code" = "200" ] || FAIL=1
           curl -fsS -X POST -d "name=ci" "http://127.0.0.1:9118/hub/device/code" | jq -e '.code | test("^[0-9]{6}$")' || FAIL=1
           docker exec lampac test -f /config/database/LampacHub.sql || { echo "::error::LampacHub.sql не в /config/database"; FAIL=1; }
+          # LampacHub: вход устройства по коду, настройки профиля и списки
+          H=http://127.0.0.1:9118
+          ADM=(--cookie "accspasswd=ci-test" -H "X-Hub: 1")
+          dev=$(curl -fsS -X POST -d "name=ci" "$H/hub/device/code" || echo '{}')
+          code=$(echo "$dev" | jq -r '.code // empty'); key=$(echo "$dev" | jq -r '.key // empty')
+          curl -fsS "${ADM[@]}" -X POST -d "code=$code&profile_id=0" "$H/hub/api/code/confirm" >/dev/null || { echo "::error::hub: подтверждение кода"; FAIL=1; }
+          tok=$(curl -fsS "$H/hub/device/poll?key=$key" | jq -r '.token // empty')
+          [ -n "$tok" ] || { echo "::error::hub: токен устройства не выдан"; FAIL=1; }
+          curl -fsS -X POST --data-urlencode "hub_token=$tok" --data-urlencode 'data={"language":"ru","plugins":"[]"}' "$H/hub/device/settings" | jq -e '.updated > 0' >/dev/null || { echo "::error::hub: сохранение настроек"; FAIL=1; }
+          curl -fsS "$H/hub/device/settings?hub_token=$tok" | jq -e '.data.language == "ru" and (.data.plugins == null)' >/dev/null || { echo "::error::hub: чтение настроек"; FAIL=1; }
+          curl -fsS -X POST --data-urlencode "hub_token=$tok" --data-urlencode 'card={"id":101,"title":"CI rewatch"}' -d "category=rewatch&on=true" "$H/hub/device/lists/set" >/dev/null || { echo "::error::hub: Пересматриваю"; FAIL=1; }
+          curl -fsS "$H/hub/device/lists?hub_token=$tok" | jq -e '.lists.rewatch[0].id == 101' >/dev/null || { echo "::error::hub: список Пересматриваю"; FAIL=1; }
+          curl -fsS "${ADM[@]}" -X POST -H "Content-Type: application/json" \
+            --data '[{"id":"202","card":{"id":202,"title":"CI look","release_date":"2020-01-01"},"categories":["look","like"]}]' \
+            "$H/hub/api/lists/import?profile_id=0" | jq -e '.count == 1' >/dev/null || { echo "::error::hub: импорт JSON"; FAIL=1; }
+          lists=$(curl -fsS "${ADM[@]}" "$H/hub/api/lists?profile_id=0" || echo '{}')
+          echo "$lists" | jq -c '{sync, items: [.items[]? | {id, categories}]}'
+          echo "$lists" | jq -e '[.items[] | select(.id == "101") | .categories[]] | index("rewatch") != null' >/dev/null || { echo "::error::hub: rewatch в админке"; FAIL=1; }
+          if [ "$(echo "$lists" | jq -r '.sync')" = "true" ]; then
+            echo "$lists" | jq -e '[.items[] | select(.id == "202") | .categories[]] | (index("look") != null and index("like") != null)' >/dev/null || { echo "::error::hub: импорт в базу Sync"; FAIL=1; }
+            curl -fsS "${ADM[@]}" -X POST -d "profile_id=0&ids=202&add=viewed" "$H/hub/api/lists/change" >/dev/null || FAIL=1
+            curl -fsS "${ADM[@]}" "$H/hub/api/lists?profile_id=0" | jq -e '[.items[] | select(.id == "202") | .categories[]] | (index("viewed") != null and index("look") == null)' >/dev/null || { echo "::error::hub: смена статуса"; FAIL=1; }
+          else
+            echo "::warning::database/Sync.sql нет — проверка записи в Sync пропущена"
+          fi
+          curl -fsS "${ADM[@]}" "$H/hub/api/lists/export" | jq -e '.format == "lampachub-lists"' >/dev/null || { echo "::error::hub: экспорт"; FAIL=1; }
           if docker logs lampac 2>&1 | grep -E "error CS[0-9]+"; then FAIL=1; fi
           docker exec lampac cat /config/init.conf | jq -c '{SkipModules: .BaseModule.SkipModules, Senku, Anistar, Animaunt, AnimeFox, AniTokyo, Hentasis, HentaiUkr, Xhamster, AnimeMonitor, LampacHub, customPlugins: .LampaWeb.customPlugins}'
           if [ "$FAIL" = "1" ]; then
