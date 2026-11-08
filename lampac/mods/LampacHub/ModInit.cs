@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Shared.Models.Events;
 using Shared.Models.Module;
 using Shared.Models.Module.Interfaces;
@@ -31,6 +32,7 @@ public class ModInit : IModuleLoaded
         modpath = baseconf.path;
         updateConf();
         EventListener.UpdateInitFile += updateConf;
+        EventListener.Middleware += ChildGuard;
 
         try
         {
@@ -45,6 +47,36 @@ public class ModInit : IModuleLoaded
     public void Dispose()
     {
         EventListener.UpdateInitFile -= updateConf;
+        EventListener.Middleware -= ChildGuard;
+    }
+
+    /// <summary>
+    /// Детский профиль: раздел 18+ (SISI, запросы /sisi*) не отвечает, даже если hub.js не загрузился
+    /// и пункт меню остался. sisi.js сам добавляет profile_id к своим запросам.
+    /// </summary>
+    static bool ChildGuard(bool first, EventMiddleware e)
+    {
+        try
+        {
+            if (first || !conf.enable || !HubStore.Ready)
+                return true;
+
+            var request = e.httpContext.Request;
+            if (!request.Path.StartsWithSegments("/sisi", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            string profile = request.Query["profile_id"];
+            if (!HubStore.IsChild(profile))
+                return true;
+
+            // Без тела: синхронный обработчик не может дождаться записи
+            e.httpContext.Response.StatusCode = 403;
+            return false;
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     void updateConf()
