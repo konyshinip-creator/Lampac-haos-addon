@@ -12,6 +12,7 @@
   var KEY_PROFILES = 'lampachub_profiles';
   var KEY_PROMPTED = 'lampachub_prompted';
   var KEY_PIN = 'lampachub_pin';
+  var KEY_SETTINGS = 'lampachub_settings_mark';
 
   var ICON = '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-4.4 0-8 2.2-8 5v1.5c0 .3.2.5.5.5h15c.3 0 .5-.2.5-.5V19c0-2.8-3.6-5-8-5Z"/></svg>';
 
@@ -144,10 +145,10 @@
     if (profileId === '') {
       // Профиль, который стоял на устройстве, удалили в админке — пусть выберут заново
       Lampa.Storage.set('lampac_profile_id', '0');
-      if (area(data.uid, '0') !== oldArea) { resetLocalData(); reload(); return; }
+      if (area(data.uid, '0') !== oldArea) { resetLocalData(); reload(); return true; }
       updateMenu();
       if (profiles().length > 1) setTimeout(function () { pickProfile(true); }, 500);
-      return;
+      return false;
     }
 
     Lampa.Storage.set('lampac_profile_id', profileId);
@@ -156,7 +157,9 @@
     if (area(data.uid, profileId) !== oldArea) {
       resetLocalData();
       reload();
+      return true;
     }
+    return false;
   }
 
   function refresh() {
@@ -164,8 +167,9 @@
 
     request('GET', '/hub/device/me', { hub_token: token() }, function (status, data) {
       if (status === 200 && data && data.status === 'ok') {
-        apply(data, false);
+        var reloading = apply(data, false);
         loadSync();
+        if (!reloading) { pullSettings(); loadLists(); }
       }
       else if (status === 401) {
         logout(true);
@@ -241,8 +245,9 @@
           if (st === 200 && res && res.status === 'ok') {
             close();
             Lampa.Noty.show('Устройство подключено к LampacHub');
-            apply(res, true);
+            var reloading = apply(res, true);
             loadSync();
+            if (!reloading) pullSettings();
           }
           else if (st === 404) {
             statusLine.text('Код истёк. Закройте окно и запросите новый.');
@@ -360,6 +365,318 @@
         else Lampa.Noty.show('Устройство не подключено');
       }
     });
+  }
+
+  // --- настройки профиля ----------------------------------------------------
+  /**
+   * Настройки Lampa общие для всех устройств профиля. Берём всё, что Lampa и плагины регистрируют
+   * как параметры настроек (Lampa.Params.values), кроме того, что зависит от экрана и железа:
+   * плеер, размер интерфейса, навигация, кеш. Плагины — только если это включено у профиля.
+   * Значения передаются как есть, строками из localStorage.
+   */
+  var SETTINGS_EXTRA = ['language', 'cub_theme', 'menu_sort', 'menu_hide'];
+  var SETTINGS_LOCAL = /^(player|lampac|lampachub|account|cloud_|internal_torrclient|infuse_|tmdb_proxy|proxy_tmdb)/;
+  var SETTINGS_LOCAL_KEYS = ['interface_size', 'navigation_type', 'keyboard_type', 'scroll_type', 'light_version',
+    'hide_outside_the_screen', 'animation', 'advanced_animation', 'request_caching', 'cache_images', 'pages_save_total',
+    'protocol', 'device_name', 'cub_domain', 'plugins', 'favorite', 'file_view'];
+
+  var settings = { ready: false, plugins: false, applying: false, dirty: {}, timer: null };
+
+  function syncedSetting(key) {
+    if (!key || typeof key !== 'string') return false;
+    if (key === 'plugins') return settings.plugins;
+    if (SETTINGS_LOCAL.test(key) || SETTINGS_LOCAL_KEYS.indexOf(key) >= 0) return false;
+    if (SETTINGS_EXTRA.indexOf(key) >= 0) return true;
+    var values = Lampa.Params && Lampa.Params.values;
+    return !!(values && values.hasOwnProperty(key));
+  }
+
+  function settingKeys() {
+    var keys = SETTINGS_EXTRA.slice();
+    var values = (Lampa.Params && Lampa.Params.values) || {};
+    for (var k in values) if (values.hasOwnProperty(k) && keys.indexOf(k) < 0) keys.push(k);
+    if (settings.plugins) keys.push('plugins');
+    return keys.filter(syncedSetting);
+  }
+
+  function settingsArea() { return area(Lampa.Storage.get('lampac_unic_id', ''), currentProfileId()); }
+
+  function settingsMark() {
+    var m = Lampa.Storage.get(KEY_SETTINGS, '{}');
+    return m && typeof m === 'object' && m.area === settingsArea() ? (m.updated || 0) : 0;
+  }
+
+  function setSettingsMark(updated) {
+    Lampa.Storage.set(KEY_SETTINGS, { area: settingsArea(), updated: updated });
+  }
+
+  function rawSetting(key) {
+    try { return window.localStorage.getItem(key); } catch (e) { return null; }
+  }
+
+  function writeSetting(key, raw) {
+    var value = raw;
+    var c = raw.charAt(0);
+    if (c === '{' || c === '[') {
+      try { value = JSON.parse(raw); } catch (e) { value = raw; }
+    }
+    Lampa.Storage.set(key, value, true);
+  }
+
+  function pushSettings(all) {
+    if (!token()) return;
+    var keys = all ? settingKeys() : Object.keys(settings.dirty).filter(syncedSetting);
+    settings.dirty = {};
+
+    var data = {};
+    keys.forEach(function (k) {
+      var raw = rawSetting(k);
+      if (raw !== null) data[k] = raw;
+    });
+    if (!Object.keys(data).length) return;
+
+    request('POST', '/hub/device/settings', { hub_token: token(), profile_id: currentProfileId() || '0', data: JSON.stringify(data) }, function (status, res) {
+      if (status === 200 && res && res.updated) setSettingsMark(res.updated);
+    });
+  }
+
+  function pullSettings() {
+    if (!token()) return;
+
+    request('GET', '/hub/device/settings', { hub_token: token(), profile_id: currentProfileId() || '0' }, function (status, res) {
+      if (status !== 200 || !res || res.status !== 'ok') return;
+
+      settings.plugins = !!res.plugins;
+      settings.ready = true;
+
+      // Профиль ещё без настроек — сохраняем настройки этого устройства
+      if (!res.data || !res.updated) { pushSettings(true); return; }
+      if (res.updated <= settingsMark()) return;
+
+      var changed = [];
+      settings.applying = true;
+      try {
+        for (var k in res.data) {
+          if (!res.data.hasOwnProperty(k) || !syncedSetting(k)) continue;
+          var raw = res.data[k];
+          if (typeof raw !== 'string') raw = JSON.stringify(raw);
+          if (rawSetting(k) === raw) continue;
+          writeSetting(k, raw);
+          changed.push(k);
+        }
+      } finally {
+        settings.applying = false;
+      }
+
+      setSettingsMark(res.updated);
+
+      // Язык, тема и плагины применяются только при запуске Lampa
+      if (changed.length) {
+        Lampa.Noty.show('LampacHub: применены настройки профиля');
+        reload();
+      }
+    });
+  }
+
+  function watchSettings() {
+    Lampa.Storage.listener.follow('change', function (e) {
+      if (!settings.ready || settings.applying || !token() || !e || !syncedSetting(e.name)) return;
+      settings.dirty[e.name] = true;
+      clearTimeout(settings.timer);
+      settings.timer = setTimeout(function () { pushSettings(false); }, 2500);
+    });
+  }
+
+  // --- мои списки -----------------------------------------------------------
+  /**
+   * Категории как в Yummy/Anihub. Пять статусов и Избранное — это категории Lampa (их синхронизирует
+   * bookmark.js), «Пересматриваю» хранит LampacHub. Статус у карточки один: новый снимает прежний.
+   */
+  var LISTS = [
+    { id: 'look', title: 'Смотрю', status: true },
+    { id: 'scheduled', title: 'Планирую', status: true },
+    { id: 'viewed', title: 'Просмотрено', status: true },
+    { id: 'continued', title: 'Отложено', status: true },
+    { id: 'thrown', title: 'Брошено', status: true },
+    { id: 'rewatch', title: 'Пересматриваю', status: true, own: true },
+    { id: 'like', title: 'Избранное' }
+  ];
+  var LAMPA_MARKS = ['look', 'viewed', 'scheduled', 'continued', 'thrown'];
+  var LIST_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M4 5h2v2H4V5Zm4 0h12v2H8V5Zm-4 6h2v2H4v-2Zm4 0h12v2H8v-2Zm-4 6h2v2H4v-2Zm4 0h12v2H8v-2Z"/></svg>';
+
+  var rewatch = [];
+
+  function listTitle(id) {
+    for (var i = 0; i < LISTS.length; i++) if (LISTS[i].id === id) return LISTS[i].title;
+    return id;
+  }
+
+  function loadLists(done) {
+    if (!token()) { rewatch = []; if (done) done(); return; }
+    request('GET', '/hub/device/lists', { hub_token: token(), profile_id: currentProfileId() || '0' }, function (status, res) {
+      if (status === 200 && res && res.lists) rewatch = res.lists.rewatch || [];
+      if (done) done();
+    });
+  }
+
+  function inRewatch(card) {
+    for (var i = 0; i < rewatch.length; i++) if (rewatch[i] && String(rewatch[i].id) === String(card.id)) return true;
+    return false;
+  }
+
+  function slimCard(card, source) {
+    var c = {};
+    try { c = Lampa.Utils.clearCard ? Lampa.Utils.clearCard(JSON.parse(JSON.stringify(card))) : card; } catch (e) { c = card; }
+    var out = {};
+    ['id', 'title', 'name', 'original_title', 'original_name', 'poster_path', 'backdrop_path', 'release_date', 'first_air_date',
+      'vote_average', 'original_language', 'genre_ids', 'img', 'poster', 'background_image', 'number_of_seasons', 'overview'].forEach(function (k) {
+      if (c[k] !== undefined && c[k] !== null) out[k] = c[k];
+    });
+    if (!out.genre_ids && card.genres) out.genre_ids = card.genres.map(function (g) { return g.id; });
+    if (typeof out.overview === 'string' && out.overview.length > 500) out.overview = out.overview.slice(0, 500);
+    out.source = card.source || source || 'tmdb';
+    return out;
+  }
+
+  function setRewatch(card, on, done) {
+    var slim = slimCard(card);
+    rewatch = rewatch.filter(function (c) { return c && String(c.id) !== String(card.id); });
+    if (on) rewatch.unshift(slim);
+    request('POST', '/hub/device/lists/set', { hub_token: token(), profile_id: currentProfileId() || '0', category: 'rewatch', card: JSON.stringify(slim), on: on }, function (status) {
+      if (status !== 200) Lampa.Noty.show('LampacHub: не удалось сохранить «Пересматриваю»');
+      if (done) done();
+    });
+  }
+
+  function cardState(card) {
+    var st = {};
+    try { st = Lampa.Favorite.check(card) || {}; } catch (e) { }
+    var res = { like: !!st.like, rewatch: inRewatch(card), status: '' };
+    for (var i = 0; i < LAMPA_MARKS.length; i++) if (st[LAMPA_MARKS[i]]) { res.status = LAMPA_MARKS[i]; break; }
+    if (!res.status && res.rewatch) res.status = 'rewatch';
+    return res;
+  }
+
+  function setStatus(card, target) {
+    var st = cardState(card);
+    if (st.status === target) target = '';
+
+    // Снять прежний статус
+    if (st.status && st.status !== 'rewatch') Lampa.Favorite.remove(st.status, card);
+    if (st.rewatch && target !== 'rewatch') setRewatch(card, false);
+
+    if (target === 'rewatch') setRewatch(card, true);
+    else if (target) Lampa.Favorite.add(target, card);
+
+    Lampa.Noty.show(target ? listTitle(target) : 'Статус снят');
+  }
+
+  function listMenu(card, button) {
+    var previous = Lampa.Controller.enabled().name;
+    var st = cardState(card);
+    var items = LISTS.map(function (l) {
+      var on = l.status ? st.status === l.id : st[l.id];
+      return { title: (on ? '✓ ' : '') + l.title, selected: on, list: l.id };
+    });
+    if (st.status) items.push({ title: 'Убрать статус', list: '' });
+
+    Lampa.Select.show({
+      title: 'Мой список',
+      items: items,
+      onSelect: function (item) {
+        Lampa.Controller.toggle(previous);
+        if (item.list === 'like') {
+          if (st.like) Lampa.Favorite.remove('like', card); else Lampa.Favorite.add('like', card);
+          Lampa.Noty.show(st.like ? 'Убрано из избранного' : 'Добавлено в избранное');
+        }
+        else setStatus(card, item.list || st.status);
+        setTimeout(function () { updateListButton(card, button); }, 300);
+      },
+      onBack: function () { Lampa.Controller.toggle(previous); }
+    });
+  }
+
+  function updateListButton(card, button) {
+    var st = cardState(card);
+    button.find('span').text(st.status ? listTitle(st.status) : 'Мой список');
+  }
+
+  /** Кнопка «Мой список» в карточке тайтла */
+  function addListButton() {
+    Lampa.Listener.follow('full', function (e) {
+      if (e.type !== 'complite' || !e.data || !e.data.movie || !token()) return;
+      var root = e.object && e.object.activity && e.object.activity.render ? e.object.activity.render() : null;
+      if (!root || root.find('.lampachub-list').length) return;
+
+      var card = e.data.movie;
+      if (!card.source && e.object.source) card.source = e.object.source;
+
+      var button = $('<div class="full-start__button selector lampachub-list">' + LIST_ICON + '<span>Мой список</span></div>');
+      button.on('hover:enter', function () { listMenu(card, button); });
+
+      var book = root.find('.button--book');
+      if (book.length) book.after(button);
+      else {
+        var box = root.find('.full-start-new__buttons');
+        if (!box.length) box = root.find('.full-start__buttons');
+        box.append(button);
+      }
+      updateListButton(card, button);
+    });
+
+    // Статус из стандартной закладки Lampa снимает «Пересматриваю»
+    try {
+      Lampa.Favorite.listener.follow('add', function (e) {
+        if (e && e.card && LAMPA_MARKS.indexOf(e.where) >= 0 && inRewatch(e.card)) setRewatch(e.card, false);
+      });
+    } catch (err) { }
+  }
+
+  /** Источник Lampa для «Пересматриваю»: открывается тем же экраном, что и категории каталога */
+  function addListSource() {
+    if (!Lampa.Api || !Lampa.Api.sources || Lampa.Api.sources.lampachub) return;
+    Lampa.Api.sources.lampachub = {
+      list: function (params, oncomplite, onerror) {
+        loadLists(function () {
+          var page = params.page || 1;
+          var all = rewatch.slice();
+          var total = Math.max(1, Math.ceil(all.length / 20));
+          var results = all.slice((page - 1) * 20, page * 20);
+          if (results.length) oncomplite({ results: results, page: page, total_pages: total });
+          else onerror();
+        });
+      }
+    };
+  }
+
+  function openList(id) {
+    var title = listTitle(id);
+    if (id === 'rewatch') Lampa.Activity.push({ url: 'rewatch', title: title, component: 'category_full', source: 'lampachub', page: 1 });
+    else Lampa.Activity.push({ url: '', title: title, component: 'favorite', type: id, page: 1 });
+  }
+
+  function myLists() {
+    var previous = Lampa.Controller.enabled().name;
+    loadLists(function () {
+      var items = LISTS.map(function (l) {
+        var n = 0;
+        if (l.own) n = rewatch.length;
+        else { try { n = (Lampa.Favorite.get({ type: l.id }) || []).length; } catch (e) { } }
+        return { title: l.title, subtitle: String(n), list: l.id };
+      });
+      Lampa.Select.show({
+        title: 'Мои списки',
+        items: items,
+        onSelect: function (item) { Lampa.Controller.toggle(previous); openList(item.list); },
+        onBack: function () { Lampa.Controller.toggle(previous); }
+      });
+    });
+  }
+
+  function addListsMenu() {
+    var item = $('<li class="menu__item selector" data-action="lampachub_lists"><div class="menu__ico">' + LIST_ICON + '</div><div class="menu__text">Мои списки</div></li>');
+    item.on('hover:enter', myLists);
+    $('.menu .menu__list').eq(0).append(item);
   }
 
   // --- PIN ------------------------------------------------------------------
@@ -608,6 +925,10 @@
     addSettings();
     addMenu();
     startChildMode();
+    watchSettings();
+    addListSource();
+    addListButton();
+    if (token()) addListsMenu();
 
     // Sync предпочитает account_email (вход в CUB) идентичности uid — профили LampacHub тогда не работают
     if (token() && Lampa.Storage.get('account_email', ''))

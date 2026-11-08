@@ -1,13 +1,16 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Shared;
 using Shared.Attributes;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace LampacHub;
 
@@ -176,6 +179,117 @@ public class HubDeviceController : BaseController
         return PhysicalFile(Path.GetFullPath(path), type);
     }
 
+    /// <summary>Устройство и профиль одного аккаунта — иначе null</summary>
+    (HubDevice device, HubProfile profile) DeviceProfileOf(string hub_token, string profile_id)
+    {
+        var device = HubStore.FindDevice(hub_token);
+        if (device == null)
+            return (null, null);
+
+        var profile = HubStore.GetProfile(string.IsNullOrEmpty(profile_id) ? HubStore.MainProfile : profile_id);
+        if (profile == null || profile.account_id != device.account_id)
+            return (device, null);
+
+        return (device, profile);
+    }
+
+    /// <summary>Настройки Lampa профиля (язык, тема, интерфейс, источники; плагины — если включено у профиля)</summary>
+    [HttpGet, AllowAnonymous]
+    [Route("hub/device/settings")]
+    public ActionResult GetSettings(string hub_token, string profile_id)
+    {
+        if (Off)
+            return NotFound();
+
+        var (device, profile) = DeviceProfileOf(hub_token, profile_id);
+        if (device == null)
+            return Reply(new { status = "revoked" }, 401);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        var (data, updated) = HubStore.GetSettings(profile.id);
+        JObject obj = null;
+        if (data != null)
+        {
+            try { obj = JObject.Parse(data); } catch { }
+        }
+
+        if (obj != null && !profile.sync_plugins)
+            obj.Remove("plugins");
+
+        return Reply(new { status = "ok", updated, plugins = profile.sync_plugins, data = obj });
+    }
+
+    [HttpPost, AllowAnonymous]
+    [RequestSizeLimit(2_000_000)]
+    [Route("hub/device/settings")]
+    public ActionResult SaveSettings(string hub_token, string profile_id, string data)
+    {
+        if (Off)
+            return NotFound();
+
+        var (device, profile) = DeviceProfileOf(hub_token, profile_id);
+        if (device == null)
+            return Reply(new { status = "revoked" }, 401);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        if (string.IsNullOrEmpty(data) || data.Length > 1_000_000)
+            return Reply(new { error = "Пустые или слишком большие настройки" }, 400);
+
+        JObject obj;
+        try { obj = JObject.Parse(data); }
+        catch { return Reply(new { error = "Неверный формат" }, 400); }
+
+        long updated = HubStore.SaveSettings(profile.id, obj, profile.sync_plugins);
+        return Reply(new { status = "ok", updated, plugins = profile.sync_plugins });
+    }
+
+    /// <summary>Свои категории профиля («Пересматриваю»): карточки целиком, свежие первыми</summary>
+    [HttpGet, AllowAnonymous]
+    [Route("hub/device/lists")]
+    public ActionResult DeviceLists(string hub_token, string profile_id)
+    {
+        if (Off)
+            return NotFound();
+
+        var (device, profile) = DeviceProfileOf(hub_token, profile_id);
+        if (device == null)
+            return Reply(new { status = "revoked" }, 401);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        var items = HubStore.ListItems(profile.id);
+        var lists = HubStore.OwnCategories.ToDictionary(c => c, c => items.Where(i => i.category == c).Select(i => i.card).ToList());
+        return Reply(new { status = "ok", lists });
+    }
+
+    [HttpPost, AllowAnonymous]
+    [RequestSizeLimit(200_000)]
+    [Route("hub/device/lists/set")]
+    public ActionResult DeviceListSet(string hub_token, string profile_id, string category, string card, bool on)
+    {
+        if (Off)
+            return NotFound();
+
+        var (device, profile) = DeviceProfileOf(hub_token, profile_id);
+        if (device == null)
+            return Reply(new { status = "revoked" }, 401);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        if (!HubStore.OwnCategories.Contains(category))
+            return Reply(new { error = "Неизвестная категория" }, 400);
+
+        var obj = SyncBookmarks.ParseObject(card);
+        string id = obj?["id"]?.ToString();
+        if (string.IsNullOrEmpty(id) || id.Length > 64)
+            return Reply(new { error = "Нет карточки" }, 400);
+
+        HubStore.SetListItem(profile.id, category, id, obj, on);
+        return Reply(new { status = "ok" });
+    }
+
     [HttpPost, AllowAnonymous]
     [Route("hub/device/profile")]
     public ActionResult DeviceProfile(string hub_token, string profile_id)
@@ -251,6 +365,7 @@ public class HubAdminController : BaseController
 
         var account = HubStore.GetAccount(HubStore.MainAccount);
         var profiles = HubStore.ListProfiles(HubStore.MainAccount);
+        var settings = HubStore.SettingsSummary();
         var now = DateTime.UtcNow;
 
         return Reply(new
@@ -261,6 +376,7 @@ public class HubAdminController : BaseController
             profiles,
             presets = HubAvatars.Presets(),
             pin = HubStore.HasPin,
+            settings = settings.ToDictionary(i => i.Key, i => new { keys = i.Value.keys, updated = i.Value.updated }),
             devices = HubStore.ListDevices(),
             pending = DeviceCodes.Pending().Select(p => new
             {
@@ -305,7 +421,7 @@ public class HubAdminController : BaseController
     [HttpPost]
     [Authorization(accessDeniedMessage: "unauthorized")]
     [Route("hub/api/profile/save")]
-    public ActionResult SaveProfile(string id, string name, string avatar, bool child, int age_limit = 12)
+    public ActionResult SaveProfile(string id, string name, string avatar, bool child, int age_limit = 12, bool sync_plugins = false)
     {
         if (Off)
             return NotFound();
@@ -320,7 +436,7 @@ public class HubAdminController : BaseController
             return Reply(new { error = "Укажите имя профиля" }, 400);
 
         if (string.IsNullOrEmpty(id))
-            return Reply(new { status = "ok", profile = HubStore.CreateProfile(HubStore.MainAccount, name, avatar, child, age_limit) });
+            return Reply(new { status = "ok", profile = HubStore.CreateProfile(HubStore.MainAccount, name, avatar, child, age_limit, sync_plugins) });
 
         var profile = HubStore.GetProfile(id);
         if (profile == null || profile.account_id != HubStore.MainAccount)
@@ -329,7 +445,7 @@ public class HubAdminController : BaseController
         if (profile.avatar != avatar)
             HubAvatars.DeleteUploaded(profile.avatar);
 
-        HubStore.UpdateProfile(id, name, avatar, child, age_limit);
+        HubStore.UpdateProfile(id, name, avatar, child, age_limit, sync_plugins);
         return Reply(new { status = "ok", profile = HubStore.GetProfile(id) });
     }
 
@@ -376,6 +492,257 @@ public class HubAdminController : BaseController
 
         HubStore.SetPin(pin);
         return Reply(new { status = "ok", pin = pin.Length != 0 });
+    }
+
+    #region lists
+    HubProfile AdminProfile(string id)
+    {
+        var profile = HubStore.GetProfile(string.IsNullOrEmpty(id) ? HubStore.MainProfile : id);
+        return profile != null && profile.account_id == HubStore.MainAccount ? profile : null;
+    }
+
+    static List<string> Csv(string value)
+        => (value ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().ToList();
+
+    static object Brief(HubLists.Entry e)
+    {
+        var c = e.card;
+        string date = (string)c["release_date"] ?? (string)c["first_air_date"] ?? string.Empty;
+        return new
+        {
+            e.id,
+            title = (string)c["title"] ?? (string)c["name"] ?? e.id,
+            original = (string)c["original_title"] ?? (string)c["original_name"] ?? string.Empty,
+            year = date.Length >= 4 ? date.Substring(0, 4) : string.Empty,
+            poster = (string)c["poster_path"] ?? (string)c["poster"] ?? (string)c["img"] ?? string.Empty,
+            tv = c["name"] != null || c["first_air_date"] != null || (string)c["method"] == "tv",
+            source = (string)c["source"] ?? string.Empty,
+            e.categories,
+            e.updated
+        };
+    }
+
+    [HttpGet]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/lists")]
+    public ActionResult Lists(string profile_id)
+    {
+        if (Off)
+            return NotFound();
+
+        var profile = AdminProfile(profile_id);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        return Reply(new
+        {
+            sync = SyncBookmarks.Available,
+            profile = profile.id,
+            items = HubLists.Entries(profile).Select(Brief)
+        });
+    }
+
+    [HttpPost]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/lists/change")]
+    public async Task<ActionResult> ListsChange(string profile_id, string ids, string add, string remove)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        var profile = AdminProfile(profile_id);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        try
+        {
+            foreach (string id in Csv(ids))
+                await HubLists.Change(profile, id, Csv(add), Csv(remove));
+        }
+        catch (TimeoutException ex)
+        {
+            return Reply(new { error = ex.Message }, 503);
+        }
+
+        return Reply(new { status = "ok" });
+    }
+
+    [HttpPost]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/lists/remove")]
+    public async Task<ActionResult> ListsRemove(string profile_id, string ids)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        var profile = AdminProfile(profile_id);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        try
+        {
+            int n = await HubLists.RemoveAll(profile, Csv(ids));
+            return Reply(new { status = "ok", count = n });
+        }
+        catch (TimeoutException ex)
+        {
+            return Reply(new { error = ex.Message }, 503);
+        }
+    }
+
+    /// <summary>Скопировать или перенести карточки в другой профиль</summary>
+    [HttpPost]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/lists/copy")]
+    public async Task<ActionResult> ListsCopy(string profile_id, string to, string ids, bool move)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        var from = AdminProfile(profile_id);
+        var target = AdminProfile(to);
+        if (from == null || target == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+        if (from.id == target.id)
+            return Reply(new { error = "Выберите другой профиль" }, 400);
+
+        var list = Csv(ids);
+        try
+        {
+            int n = await HubLists.Merge(target, HubLists.Export(from, list));
+            if (move && n > 0)
+                await HubLists.RemoveAll(from, list);
+            return Reply(new { status = "ok", count = n });
+        }
+        catch (TimeoutException ex)
+        {
+            return Reply(new { error = ex.Message }, 503);
+        }
+    }
+
+    /// <summary>Экспорт списков в JSON: одного профиля или всех, если profile_id пуст</summary>
+    [HttpGet]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/lists/export")]
+    public ActionResult ListsExport(string profile_id)
+    {
+        if (Off)
+            return NotFound();
+
+        var profiles = string.IsNullOrEmpty(profile_id)
+            ? HubStore.ListProfiles(HubStore.MainAccount)
+            : new List<HubProfile> { AdminProfile(profile_id) }.Where(p => p != null).ToList();
+
+        if (profiles.Count == 0)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        var doc = new
+        {
+            format = "lampachub-lists",
+            version = 1,
+            exported = DateTimeOffset.UtcNow.ToString("o"),
+            profiles = profiles.Select(p => new { p.id, p.name, items = HubLists.Export(p) })
+        };
+
+        string name = "lampachub-" + (profiles.Count == 1 ? profiles[0].id : "all") + "-" + DateTime.Now.ToString("yyyyMMdd") + ".json";
+        Response.Headers["Cache-Control"] = "no-store";
+        Response.Headers["Content-Disposition"] = "attachment; filename=\"" + name + "\"";
+        return Content(JsonConvert.SerializeObject(doc, Formatting.Indented), "application/json; charset=utf-8");
+    }
+
+    /// <summary>
+    /// Импорт JSON в профиль. Тело — файл экспорта LampacHub (все его профили вливаются в выбранный)
+    /// или просто массив записей { id, card, categories }.
+    /// </summary>
+    [HttpPost]
+    [RequestSizeLimit(50_000_000)]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/lists/import")]
+    public async Task<ActionResult> ListsImport([FromQuery] string profile_id)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        var profile = AdminProfile(profile_id);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        JToken doc;
+        try
+        {
+            using var reader = new StreamReader(Request.Body, Encoding.UTF8);
+            doc = JToken.Parse(await reader.ReadToEndAsync());
+        }
+        catch
+        {
+            return Reply(new { error = "Файл не похож на JSON" }, 400);
+        }
+
+        var items = new List<HubLists.Portable>();
+        try
+        {
+            IEnumerable<JToken> source = doc is JArray arr ? arr
+                : (doc["profiles"] as JArray)?.SelectMany(p => (p["items"] as JArray) ?? new JArray()) ?? Enumerable.Empty<JToken>();
+
+            foreach (var t in source.OfType<JObject>())
+            {
+                var card = t["card"] as JObject;
+                string id = (string)t["id"] ?? card?["id"]?.ToString();
+                var cats = (t["categories"] as JArray)?.Select(c => (string)c).Where(c => c != null).ToList();
+                if (!string.IsNullOrEmpty(id) && card != null && cats != null)
+                    items.Add(new HubLists.Portable { id = id, card = card, categories = cats });
+            }
+        }
+        catch
+        {
+            return Reply(new { error = "Неизвестный формат файла" }, 400);
+        }
+
+        if (items.Count == 0)
+            return Reply(new { error = "В файле нет записей LampacHub" }, 400);
+
+        try
+        {
+            int n = await HubLists.Merge(profile, items);
+            return Reply(new { status = "ok", count = n, skipped = items.Count - n });
+        }
+        catch (TimeoutException ex)
+        {
+            return Reply(new { error = ex.Message }, 503);
+        }
+    }
+    #endregion
+
+    /// <summary>Забыть сохранённые настройки профиля: следующее устройство профиля отправит свои</summary>
+    [HttpPost]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/profile/settings/reset")]
+    public ActionResult ResetSettings(string id)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        var profile = HubStore.GetProfile(id);
+        if (profile == null || profile.account_id != HubStore.MainAccount)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        HubStore.ResetSettings(profile.id);
+        return Reply(new { status = "ok" });
     }
 
     [HttpPost]
