@@ -148,6 +148,19 @@ jobs:
             echo "::warning::database/Sync.sql нет — проверка записи в Sync пропущена"
           fi
           curl -fsS "${ADM[@]}" "$H/hub/api/lists/export" | jq -e '.format == "lampachub-lists"' >/dev/null || { echo "::error::hub: экспорт"; FAIL=1; }
+          # Импорт: резервная копия Lampa (favorite строкой, как в localStorage), очередь, проверки входа
+          curl -fsS "${ADM[@]}" -X POST -H "Content-Type: application/json" \
+            --data '{"favorite":"{\"card\":[{\"id\":303,\"title\":\"CI backup\"}],\"scheduled\":[303],\"look\":[303],\"like\":[303]}"}' \
+            "$H/hub/api/import/lampa?profile_id=0" | jq -e '.count == 1' >/dev/null || { echo "::error::hub: импорт резервной копии Lampa"; FAIL=1; }
+          curl -fsS "${ADM[@]}" "$H/hub/api/import/state" | jq -e 'has("state") and has("queue")' >/dev/null || { echo "::error::hub: состояние импорта"; FAIL=1; }
+          curl -fsS "${ADM[@]}" "$H/hub/api/import/queue?profile_id=0" | jq -e '.items | type == "array"' >/dev/null || { echo "::error::hub: очередь сопоставления"; FAIL=1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' "${ADM[@]}" -X POST -d "profile_id=0&user=" "$H/hub/api/import/yummy")
+          echo "import/yummy без ника -> $code"; [ "$code" = "400" ] || FAIL=1
+          code=$(curl -s -o /dev/null -w '%{http_code}' "${ADM[@]}" -X POST -d "id=nope&kind=tv&tmdb_id=1" "$H/hub/api/import/queue/resolve")
+          echo "queue/resolve чужой записи -> $code"; [ "$code" = "404" ] || FAIL=1
+          code=$(curl -s -o /dev/null -w '%{http_code}' --cookie "accspasswd=ci-test" -X POST -d "profile_id=0&user=1" "$H/hub/api/import/yummy")
+          echo "import/yummy без X-Hub -> $code"; [ "$code" = "403" ] || FAIL=1
+          curl -sS "${ADM[@]}" "$H/hub/api/tmdb/search?q=Cowboy%20Bebop&kind=tv" | jq -e '.results | length > 0' >/dev/null || echo "::warning::hub: TMDB с раннера не ответил (это не ошибка модуля)"
           if docker logs lampac 2>&1 | grep -E "error CS[0-9]+"; then FAIL=1; fi
           docker exec lampac cat /config/init.conf | jq -c '{SkipModules: .BaseModule.SkipModules, Senku, Anistar, Animaunt, AnimeFox, AniTokyo, Hentasis, HentaiUkr, Xhamster, AnimeMonitor, LampacHub, customPlugins: .LampaWeb.customPlugins}'
           if [ "$FAIL" = "1" ]; then
