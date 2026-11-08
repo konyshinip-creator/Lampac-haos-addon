@@ -1,0 +1,13 @@
+{
+  "enable": true,
+  "dynamic": true,
+  "references": [
+    "Microsoft.Data.Sqlite"
+  ],
+  "tree": [
+    "ModInit.cs",
+    "HubStore.cs",
+    "DeviceCodes.cs",
+    "Controller.cs"
+  ]
+}

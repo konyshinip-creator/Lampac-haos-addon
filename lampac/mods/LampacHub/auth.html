@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LampacHub — вход</title>
+<style>
+  :root{color-scheme:dark}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#121418;color:#e8eaed;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px;box-sizing:border-box}
+  form{width:100%;max-width:340px;background:#1c1f26;border:1px solid #2c313b;border-radius:12px;padding:24px}
+  h1{margin:0 0 4px;font-size:20px}
+  p{margin:0 0 16px;color:#9aa0a6;font-size:14px}
+  input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid #3a404c;background:#12151b;color:inherit;font:inherit}
+  button{margin-top:12px;width:100%;padding:10px;border:0;border-radius:8px;background:#4c8dff;color:#fff;font:inherit;font-weight:600;cursor:pointer}
+</style>
+</head>
+<body>
+<form id="f">
+  <h1>LampacHub</h1>
+  <p>Введите пароль root от Lampac (файл <code>passwd</code>, в аддоне — опция <code>root_password</code>).</p>
+  <input id="p" type="password" autocomplete="current-password" placeholder="Пароль" autofocus>
+  <button type="submit">Войти</button>
+</form>
+<script>
+  document.getElementById('f').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var v = document.getElementById('p').value;
+    if (!v) return;
+    document.cookie = 'accspasswd=' + encodeURIComponent(v) + '; path=/; max-age=' + (180 * 24 * 3600) + '; SameSite=Lax';
+    location.href = '/hub';
+  });
+</script>
+</body>
+</html>

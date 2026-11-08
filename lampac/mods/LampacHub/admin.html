@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LampacHub</title>
+<style>
+  :root{color-scheme:dark;--bg:#121418;--card:#1c1f26;--line:#2c313b;--muted:#9aa0a6;--accent:#4c8dff;--danger:#f05454;--ok:#3ec27a}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#e8eaed;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  main{max-width:960px;margin:0 auto;padding:16px}
+  header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+  h1{margin:0;font-size:22px}
+  h2{margin:0 0 12px;font-size:17px}
+  .muted{color:var(--muted);font-size:13px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:16px 0}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  input,select{padding:8px 10px;border-radius:8px;border:1px solid #3a404c;background:#12151b;color:inherit;font:inherit;min-width:0}
+  input.code{font-size:22px;letter-spacing:6px;width:9.5em;text-align:center;font-variant-numeric:tabular-nums}
+  button{padding:8px 14px;border:0;border-radius:8px;background:var(--accent);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid #3a404c;color:inherit;font-weight:500}
+  button.danger{background:transparent;border:1px solid var(--danger);color:var(--danger);font-weight:500}
+  table{width:100%;border-collapse:collapse}
+  td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+  th{font-size:12px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em}
+  .avatar{width:32px;height:32px;border-radius:50%;background:#2a2f3a;display:inline-flex;align-items:center;justify-content:center;font-size:18px;overflow:hidden;vertical-align:middle}
+  .avatar img{width:100%;height:100%;object-fit:cover}
+  .tag{display:inline-block;padding:1px 8px;border-radius:999px;background:#2a2f3a;font-size:12px;margin-left:6px}
+  .pending{border:1px dashed var(--accent);border-radius:10px;padding:12px;margin-bottom:8px}
+  .pending b{font-size:22px;letter-spacing:4px;font-variant-numeric:tabular-nums}
+  #toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:#2a2f3a;padding:10px 16px;border-radius:8px;display:none;max-width:calc(100% - 32px)}
+  .scroll{overflow-x:auto}
+  @media (max-width:640px){.hide-sm{display:none}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>LampacHub</h1>
+    <span class="muted" id="acc"></span>
+  </header>
+
+  <section>
+    <h2>Вход устройства по коду</h2>
+    <p class="muted">В Lampa на устройстве: <b>Настройки → LampacHub → Войти по коду</b>. Устройство покажет 6 цифр — введите их здесь или подтвердите из списка ниже.</p>
+    <div class="row">
+      <input class="code" id="code" inputmode="numeric" maxlength="7" placeholder="000000">
+      <select id="codeProfile"></select>
+      <input id="codeName" placeholder="Имя устройства (необязательно)">
+      <button id="codeBtn">Подтвердить</button>
+    </div>
+    <div id="pending" style="margin-top:12px"></div>
+  </section>
+
+  <section>
+    <h2>Профили</h2>
+    <p class="muted">У каждого профиля свои закладки, история и тайм-коды. «Основной» — общая область, где лежат данные, накопленные до LampacHub.</p>
+    <div class="scroll"><table id="profiles"></table></div>
+    <div class="row" style="margin-top:12px">
+      <input id="pName" placeholder="Имя нового профиля" maxlength="40">
+      <input id="pAvatar" placeholder="Аватар: эмодзи или URL" style="width:12em">
+      <label class="row muted"><input type="checkbox" id="pChild"> детский</label>
+      <button id="pAdd">Добавить</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Устройства</h2>
+    <div class="scroll"><table id="devices"></table></div>
+    <p class="muted">Отзыв удаляет вход устройства: при следующем запуске Lampa оно выйдет из LampacHub и вернётся к экрану входа.</p>
+  </section>
+</main>
+<div id="toast"></div>
+<script>
+(function () {
+  'use strict';
+  var state = null;
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function toast(t) { var el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(function () { el.style.display = 'none'; }, 3500); }
+  function ago(sec) {
+    if (!sec) return '—';
+    var d = Math.floor(Date.now() / 1000) - sec;
+    if (d < 60) return 'только что';
+    if (d < 3600) return Math.floor(d / 60) + ' мин назад';
+    if (d < 86400) return Math.floor(d / 3600) + ' ч назад';
+    return new Date(sec * 1000).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+  function avatar(p) {
+    var a = p && p.avatar || '';
+    if (/^https?:\/\//i.test(a)) return '<span class="avatar"><img src="' + esc(a) + '" alt=""></span>';
+    return '<span class="avatar">' + esc(a || (p && p.name ? p.name.charAt(0).toUpperCase() : '?')) + '</span>';
+  }
+  function profileName(id) {
+    var p = (state && state.profiles || []).filter(function (x) { return x.id === id; })[0];
+    return p ? p.name : '—';
+  }
+  function profileOptions(selected) {
+    return (state.profiles || []).map(function (p) {
+      return '<option value="' + esc(p.id) + '"' + (p.id === selected ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+    }).join('');
+  }
+
+  function api(path, data) {
+    var opts = { credentials: 'same-origin', headers: { 'X-Hub': '1' } };
+    if (data) {
+      opts.method = 'POST';
+      opts.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      opts.body = new URLSearchParams(data).toString();
+    }
+    return fetch(path, opts).then(function (r) {
+      if (r.status === 401) { location.href = '/hub/auth'; throw new Error('unauthorized'); }
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+        return j;
+      });
+    });
+  }
+
+  function load() {
+    return api('/hub/api/state').then(function (s) { state = s; render(); }).catch(function (e) { if (e.message !== 'unauthorized') toast(e.message); });
+  }
+
+  function render() {
+    $('acc').textContent = 'Аккаунт: ' + state.account.name;
+    var keep = $('codeProfile').value;
+    $('codeProfile').innerHTML = profileOptions(keep || '0');
+
+    $('pending').innerHTML = (state.pending || []).map(function (p) {
+      return '<div class="pending row"><b>' + esc(p.code.slice(0, 3) + ' ' + p.code.slice(3)) + '</b>' +
+        '<span>' + esc(p.name || 'Устройство') + ' <span class="muted">' + esc(p.ip) + ' · ещё ' + Math.max(0, Math.round(p.ttl / 60)) + ' мин</span></span>' +
+        '<select data-pp="' + esc(p.code) + '">' + profileOptions('0') + '</select>' +
+        '<button data-confirm="' + esc(p.code) + '">Подтвердить</button></div>';
+    }).join('') || '<span class="muted">Сейчас никто не ждёт подтверждения.</span>';
+
+    $('profiles').innerHTML = '<tr><th></th><th>Имя</th><th>Аватар</th><th>Детский</th><th class="hide-sm">ID</th><th></th></tr>' +
+      state.profiles.map(function (p) {
+        return '<tr data-id="' + esc(p.id) + '"><td>' + avatar(p) + '</td>' +
+          '<td><input data-f="name" value="' + esc(p.name) + '" maxlength="40"></td>' +
+          '<td><input data-f="avatar" value="' + esc(p.avatar) + '" style="width:9em"></td>' +
+          '<td><input type="checkbox" data-f="child"' + (p.child ? ' checked' : '') + '></td>' +
+          '<td class="hide-sm muted">' + esc(p.id) + '</td>' +
+          '<td class="row"><button class="ghost" data-save="' + esc(p.id) + '">Сохранить</button>' +
+          (p.id === '0' ? '' : '<button class="danger" data-del="' + esc(p.id) + '">Удалить</button>') + '</td></tr>';
+      }).join('');
+
+    $('devices').innerHTML = '<tr><th>Устройство</th><th>Профиль</th><th>Последний вход</th><th class="hide-sm">IP</th><th></th></tr>' +
+      (state.devices.length ? state.devices.map(function (d) {
+        return '<tr><td><input data-dn="' + esc(d.id) + '" value="' + esc(d.name) + '" title="' + esc(d.user_agent) + '"></td>' +
+          '<td>' + esc(profileName(d.profile_id)) + '</td>' +
+          '<td>' + esc(ago(d.last_seen)) + '</td>' +
+          '<td class="hide-sm muted">' + esc(d.last_ip) + '</td>' +
+          '<td class="row"><button class="ghost" data-rename="' + esc(d.id) + '">Переименовать</button>' +
+          '<button class="danger" data-revoke="' + esc(d.id) + '">Отозвать</button></td></tr>';
+      }).join('') : '<tr><td colspan="5" class="muted">Устройств пока нет.</td></tr>');
+  }
+
+  function confirmCode(code, profile, name) {
+    return api('/hub/api/code/confirm', { code: code, profile_id: profile, name: name || '' })
+      .then(function () { toast('Устройство подключено'); $('code').value = ''; $('codeName').value = ''; return load(); })
+      .catch(function (e) { toast(e.message); });
+  }
+
+  $('codeBtn').onclick = function () {
+    var c = $('code').value.replace(/\D/g, '');
+    if (c.length !== 6) { toast('Код — 6 цифр'); return; }
+    confirmCode(c, $('codeProfile').value, $('codeName').value);
+  };
+  $('code').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('codeBtn').onclick(); });
+
+  $('pAdd').onclick = function () {
+    var name = $('pName').value.trim();
+    if (!name) { toast('Укажите имя профиля'); return; }
+    api('/hub/api/profile/save', { name: name, avatar: $('pAvatar').value.trim(), child: $('pChild').checked })
+      .then(function () { $('pName').value = ''; $('pAvatar').value = ''; $('pChild').checked = false; toast('Профиль создан'); return load(); })
+      .catch(function (e) { toast(e.message); });
+  };
+
+  document.addEventListener('click', function (e) {
+    var t = e.target, id;
+    if ((id = t.getAttribute('data-confirm'))) {
+      var sel = document.querySelector('select[data-pp="' + id + '"]');
+      confirmCode(id, sel ? sel.value : '0', '');
+    }
+    else if ((id = t.getAttribute('data-save'))) {
+      var tr = t.closest('tr');
+      api('/hub/api/profile/save', {
+        id: id,
+        name: tr.querySelector('[data-f=name]').value.trim(),
+        avatar: tr.querySelector('[data-f=avatar]').value.trim(),
+        child: tr.querySelector('[data-f=child]').checked
+      }).then(function () { toast('Сохранено'); return load(); }).catch(function (e) { toast(e.message); });
+    }
+    else if ((id = t.getAttribute('data-del'))) {
+      if (!confirm('Удалить профиль? Его закладки и история останутся в базе Sync, но в Lampa профиль пропадёт.')) return;
+      api('/hub/api/profile/delete', { id: id }).then(function () { toast('Профиль удалён'); return load(); }).catch(function (e) { toast(e.message); });
+    }
+    else if ((id = t.getAttribute('data-rename'))) {
+      var inp = document.querySelector('input[data-dn="' + id + '"]');
+      api('/hub/api/device/rename', { id: id, name: inp.value.trim() }).then(function () { toast('Сохранено'); return load(); }).catch(function (e) { toast(e.message); });
+    }
+    else if ((id = t.getAttribute('data-revoke'))) {
+      if (!confirm('Отозвать вход этого устройства?')) return;
+      api('/hub/api/device/revoke', { id: id }).then(function () { toast('Устройство отозвано'); return load(); }).catch(function (e) { toast(e.message); });
+    }
+  });
+
+  load();
+  // Ожидающие коды появляются, пока страница открыта; не перерисовываем, если что-то редактируется
+  setInterval(function () {
+    var a = document.activeElement;
+    if (a && (a.tagName === 'INPUT' || a.tagName === 'SELECT')) return;
+    load();
+  }, 4000);
+})();
+</script>
+</body>
+</html>

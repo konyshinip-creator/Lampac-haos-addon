@@ -109,6 +109,7 @@ TimeCode и синхронизация уже подключены.
 | `enable_monitor` | `true` | Мониторинг доступности источников (`/animemon`) |
 | `monitor_interval` | `10` | Интервал проверок, минуты |
 | `monitor_webhook` | *(пусто)* | URL для POST при смене статуса источника |
+| `enable_hub` | `false` | LampacHub: профили, вход устройств по коду, админка `/hub`; плагин `hub.js` подключается в Lampa сам |
 | `extra_init_json` | *(пусто)* | Произвольный JSON, подмешиваемый в `init.conf` при каждом запуске |
 
 ## Управление модулями
@@ -163,6 +164,7 @@ Mirage, Spectre, Videoseed и ENG-источники (Autoembed, Playembed, Twoe
 | `Hentasis` | hentasis1.top в разделе 18+; опция `enable_hentasis` |
 | `HentaiUkr` | hentaiukr.com в разделе 18+; опция `enable_hentaiukr` |
 | `AnimeMonitor` | мониторинг доступности источников |
+| `LampacHub` | профили со своими закладками и историей, вход устройств по коду; опция `enable_hub` |
 
 **Мониторинг.** Страница `http://<IP>:9118/animemon`, JSON для
 REST-сенсора — `http://<IP>:9118/animemon/status`. Если задать
@@ -170,6 +172,12 @@ REST-сенсора — `http://<IP>:9118/animemon/status`. Если задат�
 при каждом падении или восстановлении источника туда уйдёт POST с JSON.
 Примеры сенсора и автоматизации, смена зеркал и установка этих модулей в
 обычный (не HA) Lampac — в `mods/README.md` репозитория.
+
+**LampacHub.** Включите опцию `enable_hub` и перезапустите аддон. Плагин
+`hub.js` добавится в Lampa, которую раздаёт Lampac (`http://<IP>:9118/`),
+автоматически. Админка — `http://<IP>:9118/hub`, пароль = `root_password`.
+На устройстве: **Настройки → LampacHub → Войти по коду**, код подтверждается
+в админке. Подробности — в `mods/README.md`.
 
 ## Управление источниками контента (/adminpanel/)
 
@@ -195,6 +203,9 @@ Samba share или Studio Code Server):
 - `init.conf` — основной конфиг Lampac
 - `passwd` — пароль root
 - `module/AdminPanel/manifest.json` — состояние встроенной админки
+- `database/` — данные пользователей Lampac: закладки (`Sync.sql`),
+  позиции просмотра (`TimeCode.sql`), `storage/` и др. Переживают
+  обновления аддона и попадают в бэкап Home Assistant
 
 Файлы создаются один раз при первом запуске и дальше только патчатся
 аддоном по опциям — ручные правки (в т.ч. из `/adminpanel/`) не теряются.
