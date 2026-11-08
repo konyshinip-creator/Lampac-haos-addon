@@ -27,6 +27,9 @@ public class HubConf
     /// <summary>Токен приложения Yummy (X-Application, yummyani.me/dev/applications). Необязателен</summary>
     public string yummy_app { get; set; } = string.Empty;
 
+    /// <summary>API AniLiberty для импорта (зеркала: anilibria.top/api/v1, api.anilibria.app/api/v1)</summary>
+    public string aniliberty_api { get; set; } = "https://aniliberty.top/api/v1";
+
     /// <summary>Таблица соответствий MAL → TMDB/TVDB/IMDb (Fribb/anime-lists), кешируется на 7 дней</summary>
     public string anime_map_url { get; set; } = "https://raw.githubusercontent.com/Fribb/anime-lists/master/anime-list-full.json";
 }
