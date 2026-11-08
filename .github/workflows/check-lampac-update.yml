@@ -84,6 +84,7 @@ jobs:
           import json, yaml
           opts = yaml.safe_load(open("lampac/config.yaml"))["options"]
           opts["root_password"] = "ci-test"
+          opts["enable_hub"] = True
           json.dump(opts, open("ci-data/options.json", "w"))
           EOF
           docker run -d --name lampac -p 9118:9118 -v "$PWD/ci-data:/data" lampac-addon:ci
@@ -101,21 +102,28 @@ jobs:
           docker logs lampac 2>&1 | grep -q "Configure complete" || { echo "::error::Lampac не закончил загрузку модулей"; docker logs lampac 2>&1 | tail -200; exit 1; }
           sleep 5
           FAIL=0
-          for m in Senku Anistar Animaunt AnimeFox AniTokyo Hentasis HentaiUkr AnimeMonitor; do
+          for m in Senku Anistar Animaunt AnimeFox AniTokyo Hentasis HentaiUkr AnimeMonitor LampacHub; do
             if docker logs lampac 2>&1 | grep -qE "^loaded module: $m[[:space:]]*$"; then
               echo "module $m: loaded"
             else
               echo "::error::module $m не загрузился"; FAIL=1
             fi
           done
-          for r in lite/senku lite/anistar lite/animaunt lite/animefox lite/anitokyo hentasis hentaiukr animemon/status; do
+          for r in lite/senku lite/anistar lite/animaunt lite/animefox lite/anitokyo hentasis hentaiukr animemon/status hub.js hub/auth; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "http://127.0.0.1:9118/$r" || true)
             echo "/$r -> $code"
             # 503 — штатный ответ модуля на запрос без title (OnError), роут жив
             case "$code" in 404|000) FAIL=1 ;; esac
           done
+          # LampacHub: админка без пароля закрыта, код входа выдаётся, база создана в /config
+          code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:9118/hub/api/state")
+          echo "/hub/api/state без пароля -> $code"; [ "$code" = "401" ] || FAIL=1
+          code=$(curl -s -o /dev/null -w '%{http_code}' --cookie "accspasswd=ci-test" "http://127.0.0.1:9118/hub/api/state")
+          echo "/hub/api/state с паролем -> $code"; [ "$code" = "200" ] || FAIL=1
+          curl -fsS -X POST -d "name=ci" "http://127.0.0.1:9118/hub/device/code" | jq -e '.code | test("^[0-9]{6}$")' || FAIL=1
+          docker exec lampac test -f /config/database/LampacHub.sql || { echo "::error::LampacHub.sql не в /config/database"; FAIL=1; }
           if docker logs lampac 2>&1 | grep -E "error CS[0-9]+"; then FAIL=1; fi
-          docker exec lampac cat /config/init.conf | jq -c '{SkipModules: .BaseModule.SkipModules, Senku, Anistar, Animaunt, AnimeFox, AniTokyo, Hentasis, HentaiUkr, Xhamster, AnimeMonitor}'
+          docker exec lampac cat /config/init.conf | jq -c '{SkipModules: .BaseModule.SkipModules, Senku, Anistar, Animaunt, AnimeFox, AniTokyo, Hentasis, HentaiUkr, Xhamster, AnimeMonitor, LampacHub, customPlugins: .LampaWeb.customPlugins}'
           if [ "$FAIL" = "1" ]; then
             echo "::error::Модули не загрузились, лог контейнера ниже"
             docker logs lampac 2>&1 | tail -200
