@@ -366,17 +366,95 @@
   /** Выход из детского профиля: если в админке задан PIN, сначала спросить его и проверить на сервере */
   function guardChild(next) {
     if (childLimit() < 0 || !Lampa.Storage.get(KEY_PIN, false)) { next(); return; }
+    askPin(next);
+  }
 
+  var PIN_MAX = 8;
+
+  function pinStyles() {
+    if (document.getElementById('lampachub-pin-style')) return;
+    var css = '.lhub-pin{text-align:center;padding:.5em 0}' +
+      '.lhub-pin__dots{font-size:2.4em;letter-spacing:.35em;min-height:1.4em;margin:.2em 0 .1em}' +
+      '.lhub-pin__msg{min-height:1.4em;opacity:.7;margin-bottom:.6em}' +
+      '.lhub-pin__msg.error{color:#ff6b6b;opacity:1}' +
+      '.lhub-pin__grid{display:inline-grid;grid-template-columns:repeat(3,4.2em);gap:.6em}' +
+      '.lhub-pin__key{height:3em;line-height:3em;border-radius:.5em;background:rgba(255,255,255,.1);font-size:1.4em;cursor:pointer}' +
+      '.lhub-pin__key.focus,.lhub-pin__key:hover{background:#fff;color:#000}';
+    $('<style id="lampachub-pin-style"></style>').text(css).appendTo('head');
+  }
+
+  /** Ввод PIN цифровой панелью: цифры скрыты точками, работают и кнопки пульта 0–9 */
+  function askPin(next) {
+    pinStyles();
     var previous = Lampa.Controller.enabled().name;
-    Lampa.Input.edit({ title: 'PIN для выхода из детского профиля', value: '', free: true, nosave: true }, function (value) {
+    var value = '';
+    var busy = false;
+    var closed = false;
+
+    var html = $('<div class="lhub-pin"></div>');
+    var dots = $('<div class="lhub-pin__dots"></div>');
+    var msg = $('<div class="lhub-pin__msg"></div>').text('Введите PIN');
+    var grid = $('<div class="lhub-pin__grid"></div>');
+    html.append(dots, msg, grid);
+
+    function render() {
+      var d = '';
+      for (var i = 0; i < value.length; i++) d += '\u25CF';
+      dots.text(d || '\u00A0');
+    }
+
+    function message(text, error) { msg.text(text).toggleClass('error', !!error); }
+
+    function close() {
+      if (closed) return;
+      closed = true;
+      window.removeEventListener('keydown', onKey, true);
+      Lampa.Modal.close();
       Lampa.Controller.toggle(previous);
-      value = String(value || '').trim();
-      if (!value) return;
+    }
+
+    function press(key) {
+      if (busy || closed) return;
+      if (key === 'del') value = value.slice(0, -1);
+      else if (key === 'ok') { submit(); return; }
+      else if (value.length < PIN_MAX) value += key;
+      message('Введите PIN');
+      render();
+    }
+
+    function submit() {
+      if (value.length < 4) { message('PIN — от 4 до 8 цифр', true); return; }
+      busy = true;
+      message('Проверка…');
       request('POST', '/hub/device/pin', { hub_token: token(), pin: value }, function (status, res) {
-        if (status === 200 && res && res.ok) next();
-        else Lampa.Noty.show((res && res.error) || 'Не удалось проверить PIN');
+        busy = false;
+        if (closed) return;
+        if (status === 200 && res && res.ok) { close(); next(); return; }
+        value = '';
+        render();
+        message((res && res.error) || 'Не удалось проверить PIN', true);
       });
+    }
+
+    function onKey(e) {
+      var code = e.keyCode || e.which;
+      var digit = code >= 48 && code <= 57 ? code - 48 : (code >= 96 && code <= 105 ? code - 96 : -1);
+      if (digit < 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      press(String(digit));
+    }
+
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'].forEach(function (key) {
+      var label = key === 'del' ? '\u232B' : (key === 'ok' ? 'OK' : key);
+      var btn = $('<div class="lhub-pin__key selector"></div>').text(label);
+      btn.on('hover:enter', function () { press(key); });
+      grid.append(btn);
     });
+
+    render();
+    Lampa.Modal.open({ title: 'PIN для выхода из детского профиля', html: html, size: 'small', onBack: close });
+    window.addEventListener('keydown', onKey, true);
   }
 
   // --- детский профиль ------------------------------------------------------
