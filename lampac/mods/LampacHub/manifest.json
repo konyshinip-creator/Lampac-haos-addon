@@ -8,7 +8,7 @@
     "ModInit.cs",
     "HubStore.cs",
     "DeviceCodes.cs",
-    "Avatars.cs",
+    "Avatars.cs", "SyncBookmarks.cs", "Lists.cs",
     "Controller.cs"
   ]
 }

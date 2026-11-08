@@ -39,6 +39,12 @@
   .grid button:hover,.grid button:focus{border-color:var(--accent)}
   .grid img{width:100%;height:100%;display:block}
   .age{min-width:5.5em}
+  .poster{width:34px;height:50px;border-radius:4px;object-fit:cover;background:#2a2f3a;display:block}
+  .chip{display:inline-block;padding:1px 8px;border-radius:999px;background:#2a2f3a;font-size:12px;margin:2px 4px 2px 0}
+  .chip.dup{background:#5a3a12}
+  .star{background:transparent;border:0;font-size:20px;padding:0 6px;color:#666;cursor:pointer}
+  .star.on{color:#ffc83d}
+  #lBulk{margin:10px 0;padding:8px 10px;border:1px dashed var(--line);border-radius:10px}
   @media (max-width:640px){.hide-sm{display:none}}
 </style>
 </head>
@@ -74,6 +80,35 @@
       <select id="pAge" class="age" title="Возрастной лимит детского профиля"></select>
       <button id="pAdd">Добавить</button>
     </div>
+  </section>
+
+  <section>
+    <h2>Списки</h2>
+    <p class="muted">Категории как в Yummy/Anihub: Смотрю, Планирую, Просмотрено, Отложено, Брошено, Пересматриваю и Избранное. Первые пять и Избранное — это категории Lampa (Синхронизация Lampac), «Пересматриваю» хранит LampacHub. Изменения отсюда устройства подхватят при следующем запуске Lampa.</p>
+    <div class="row">
+      <select id="lProfile" title="Профиль"></select>
+      <select id="lFilter" title="Категория"></select>
+      <input id="lSearch" placeholder="Поиск по названию" style="flex:1;min-width:10em">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="ghost" id="lExport">Экспорт профиля</button>
+      <button class="ghost" id="lExportAll">Экспорт всех профилей</button>
+      <button class="ghost" id="lImport">Импорт JSON в профиль…</button>
+      <input type="file" id="lImportFile" accept=".json,application/json" hidden>
+      <span class="muted" id="lCount"></span>
+    </div>
+    <div class="row" id="lBulk" style="display:none">
+      <span id="lSel"></span>
+      <select id="lBulkStatus"></select>
+      <button class="ghost" id="lBulkApply">Применить</button>
+      <span class="muted">в профиль</span>
+      <select id="lTarget"></select>
+      <button class="ghost" id="lCopy">Копировать</button>
+      <button class="ghost" id="lMove">Перенести</button>
+      <button class="danger" id="lRemove">Убрать из списков</button>
+    </div>
+    <div class="scroll"><table id="lists"></table></div>
+    <div class="row" style="margin-top:8px"><button class="ghost" id="lMore" style="display:none">Показать ещё</button></div>
   </section>
 
   <section>
@@ -371,13 +406,205 @@
     }
   });
 
-  load();
+  load().then(function () { if (state) { renderListsControls(); loadLists(); } });
+  // --- списки ---------------------------------------------------------------
+  var CATS = [
+    ['look', 'Смотрю'], ['scheduled', 'Планирую'], ['viewed', 'Просмотрено'], ['continued', 'Отложено'],
+    ['thrown', 'Брошено'], ['rewatch', 'Пересматриваю'], ['like', 'Избранное'],
+    ['history', 'История'], ['book', 'Закладки'], ['wath', 'Позже']
+  ];
+  var STATUSES = ['look', 'scheduled', 'viewed', 'continued', 'thrown', 'rewatch'];
+  var catName = {};
+  CATS.forEach(function (c) { catName[c[0]] = c[1]; });
+
+  var lists = { profile: '0', items: [], selected: {}, shown: 100, loading: false };
+
+  function statusOptions(selected, placeholder) {
+    return '<option value="">' + placeholder + '</option>' + STATUSES.map(function (c) {
+      return '<option value="' + c + '"' + (c === selected ? ' selected' : '') + '>' + catName[c] + '</option>';
+    }).join('');
+  }
+
+  function normTitle(t) { return String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/g, ''); }
+
+  /** Дубли: одно название и год под разными id, или у карточки больше одного статуса */
+  function duplicates() {
+    var groups = {}, dup = {};
+    lists.items.forEach(function (i) {
+      var key = normTitle(i.title) + '|' + i.year;
+      (groups[key] = groups[key] || []).push(i);
+      if (i.categories.filter(function (c) { return STATUSES.indexOf(c) >= 0; }).length > 1) dup[i.id] = 'несколько статусов';
+    });
+    Object.keys(groups).forEach(function (k) {
+      if (groups[k].length > 1) groups[k].forEach(function (i) { dup[i.id] = dup[i.id] || 'одинаковое название'; });
+    });
+    return dup;
+  }
+
+  function posterUrl(p) {
+    if (!p) return '';
+    if (/^https?:\/\//i.test(p)) return p;
+    if (p.charAt(0) === '/') return 'https://image.tmdb.org/t/p/w92' + p;
+    return '';
+  }
+
+  function visibleItems() {
+    var f = $('lFilter').value, q = normTitle($('lSearch').value), dup = f === 'dup' ? duplicates() : null;
+    var list = lists.items.filter(function (i) {
+      if (dup && !dup[i.id]) return false;
+      if (f && f !== 'dup' && i.categories.indexOf(f) < 0) return false;
+      if (q && normTitle(i.title + ' ' + i.original).indexOf(q) < 0) return false;
+      return true;
+    });
+    if (dup) list.sort(function (a, b) { return normTitle(a.title).localeCompare(normTitle(b.title)); });
+    return { list: list, dup: dup || {} };
+  }
+
+  function renderListsControls() {
+    if (!state) return;
+    var keep = $('lProfile').value || lists.profile;
+    $('lProfile').innerHTML = profileOptions(keep);
+    var target = $('lTarget').value;
+    $('lTarget').innerHTML = (state.profiles || []).filter(function (p) { return p.id !== lists.profile; }).map(function (p) {
+      return '<option value="' + esc(p.id) + '"' + (p.id === target ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+    }).join('');
+  }
+
+  function renderLists() {
+    var v = visibleItems();
+    var counts = {};
+    lists.items.forEach(function (i) { i.categories.forEach(function (c) { counts[c] = (counts[c] || 0) + 1; }); });
+
+    var f = $('lFilter').value;
+    $('lFilter').innerHTML = '<option value="">Все (' + lists.items.length + ')</option>' + CATS.map(function (c) {
+      return '<option value="' + c[0] + '"' + (f === c[0] ? ' selected' : '') + '>' + c[1] + ' (' + (counts[c[0]] || 0) + ')</option>';
+    }).join('') + '<option value="dup"' + (f === 'dup' ? ' selected' : '') + '>Возможные дубли</option>';
+
+    $('lCount').textContent = v.list.length === lists.items.length ? '' : 'Показано ' + v.list.length + ' из ' + lists.items.length;
+
+    var rows = v.list.slice(0, lists.shown).map(function (i) {
+      var status = STATUSES.filter(function (c) { return i.categories.indexOf(c) >= 0; })[0] || '';
+      var chips = i.categories.filter(function (c) { return STATUSES.indexOf(c) < 0 && c !== 'like'; }).map(function (c) { return '<span class="chip">' + esc(catName[c] || c) + '</span>'; }).join('');
+      if (v.dup[i.id]) chips += '<span class="chip dup">' + esc(v.dup[i.id]) + '</span>';
+      var img = posterUrl(i.poster);
+      return '<tr data-lid="' + esc(i.id) + '">' +
+        '<td><input type="checkbox" data-lsel="' + esc(i.id) + '"' + (lists.selected[i.id] ? ' checked' : '') + '></td>' +
+        '<td class="hide-sm">' + (img ? '<img class="poster" loading="lazy" src="' + esc(img) + '" alt="">' : '<span class="poster"></span>') + '</td>' +
+        '<td><b>' + esc(i.title) + '</b> <span class="muted">' + esc([i.year, i.tv ? 'сериал' : 'фильм'].filter(Boolean).join(' · ')) + '</span>' +
+          (i.original && i.original !== i.title ? '<div class="muted">' + esc(i.original) + '</div>' : '') +
+          '<div>' + chips + '<span class="muted hide-sm">id ' + esc(i.id) + '</span></div></td>' +
+        '<td><select data-lstatus="' + esc(i.id) + '">' + statusOptions(status, '— без статуса —') + '</select></td>' +
+        '<td><button class="star' + (i.categories.indexOf('like') >= 0 ? ' on' : '') + '" data-llike="' + esc(i.id) + '" title="Избранное">★</button></td>' +
+        '<td><button class="danger" data-ldel="' + esc(i.id) + '" title="Убрать из всех списков">✕</button></td></tr>';
+    }).join('');
+
+    $('lists').innerHTML = rows || '<tr><td class="muted">' + (lists.loading ? 'Загрузка…' : lists.sync === false ? 'База Sync не найдена: включите модуль Sync в Lampac.' : 'Пусто') + '</td></tr>';
+    $('lMore').style.display = v.list.length > lists.shown ? '' : 'none';
+    renderBulk();
+  }
+
+  function selectedIds() { return Object.keys(lists.selected).filter(function (k) { return lists.selected[k]; }); }
+
+  function renderBulk() {
+    var n = selectedIds().length;
+    $('lBulk').style.display = n ? '' : 'none';
+    $('lSel').textContent = 'Выбрано: ' + n;
+  }
+
+  function loadLists() {
+    lists.loading = true;
+    lists.profile = $('lProfile').value || lists.profile || '0';
+    return api('/hub/api/lists?profile_id=' + encodeURIComponent(lists.profile)).then(function (r) {
+      lists.items = r.items || [];
+      lists.sync = r.sync;
+      lists.loading = false;
+      var ids = {};
+      lists.items.forEach(function (i) { ids[i.id] = true; });
+      Object.keys(lists.selected).forEach(function (k) { if (!ids[k]) delete lists.selected[k]; });
+      renderListsControls();
+      renderLists();
+    }).catch(function (e) { lists.loading = false; toast(e.message); });
+  }
+
+  function change(ids, add, remove) {
+    return api('/hub/api/lists/change', { profile_id: lists.profile, ids: ids.join(','), add: add.join(','), remove: remove.join(',') })
+      .then(loadLists).catch(function (e) { toast(e.message); });
+  }
+
+  $('lProfile').onchange = function () { lists.selected = {}; lists.shown = 100; loadLists(); };
+  $('lFilter').onchange = function () { lists.shown = 100; renderLists(); };
+  $('lSearch').oninput = function () { lists.shown = 100; renderLists(); };
+  $('lMore').onclick = function () { lists.shown += 200; renderLists(); };
+  $('lBulkStatus').innerHTML = statusOptions('', 'Статус…');
+
+  document.addEventListener('change', function (e) {
+    var t = e.target, id;
+    if ((id = t.getAttribute('data-lsel'))) { lists.selected[id] = t.checked; renderBulk(); }
+    else if ((id = t.getAttribute('data-lstatus'))) {
+      if (t.value) change([id], [t.value], []);
+      else change([id], [], STATUSES);
+    }
+  });
+
+  document.addEventListener('click', function (e) {
+    var t = e.target, id;
+    if ((id = t.getAttribute('data-llike'))) {
+      if (t.classList.contains('on')) change([id], [], ['like']); else change([id], ['like'], []);
+    }
+    else if ((id = t.getAttribute('data-ldel'))) {
+      if (!confirm('Убрать карточку из всех списков и истории профиля?')) return;
+      api('/hub/api/lists/remove', { profile_id: lists.profile, ids: id }).then(loadLists).catch(function (e) { toast(e.message); });
+    }
+  });
+
+  $('lBulkApply').onclick = function () {
+    var s = $('lBulkStatus').value;
+    if (!s) { toast('Выберите статус'); return; }
+    change(selectedIds(), [s], []).then(function () { toast('Готово'); });
+  };
+
+  function copyTo(move) {
+    var to = $('lTarget').value, ids = selectedIds();
+    if (!to) { toast('Нет другого профиля'); return; }
+    if (move && !confirm('Перенести ' + ids.length + ' карточ. в другой профиль? Здесь они пропадут.')) return;
+    api('/hub/api/lists/copy', { profile_id: lists.profile, to: to, ids: ids.join(','), move: move })
+      .then(function (r) { toast((move ? 'Перенесено: ' : 'Скопировано: ') + r.count); lists.selected = {}; return loadLists(); })
+      .catch(function (e) { toast(e.message); });
+  }
+  $('lCopy').onclick = function () { copyTo(false); };
+  $('lMove').onclick = function () { copyTo(true); };
+
+  $('lRemove').onclick = function () {
+    var ids = selectedIds();
+    if (!confirm('Убрать ' + ids.length + ' карточ. из всех списков и истории профиля?')) return;
+    api('/hub/api/lists/remove', { profile_id: lists.profile, ids: ids.join(',') })
+      .then(function () { lists.selected = {}; return loadLists(); }).catch(function (e) { toast(e.message); });
+  };
+
+  $('lExport').onclick = function () { location.href = '/hub/api/lists/export?profile_id=' + encodeURIComponent(lists.profile); };
+  $('lExportAll').onclick = function () { location.href = '/hub/api/lists/export'; };
+  $('lImport').onclick = function () { $('lImportFile').value = ''; $('lImportFile').click(); };
+  $('lImportFile').onchange = function () {
+    var file = this.files[0];
+    if (!file) return;
+    var name = (findProfile(lists.profile).name || lists.profile);
+    if (!confirm('Импортировать «' + file.name + '» в профиль «' + name + '»? Записи добавятся к имеющимся.')) return;
+    fetch('/hub/api/lists/import?profile_id=' + encodeURIComponent(lists.profile), {
+      method: 'POST', credentials: 'same-origin', headers: { 'X-Hub': '1', 'Content-Type': 'application/json' }, body: file
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
+    }).then(function (r) {
+      toast('Импортировано: ' + r.count + (r.skipped ? ', пропущено: ' + r.skipped : ''));
+      return loadLists();
+    }).catch(function (e) { toast(e.message); });
+  };
+
   // Ожидающие коды появляются, пока страница открыта; не перерисовываем, если что-то редактируется
   setInterval(function () {
     var a = document.activeElement;
     if (a && (a.tagName === 'INPUT' || a.tagName === 'SELECT')) return;
     if ($('picker').style.display === 'flex') return;
-    load();
+    load().then(renderListsControls);
   }, 4000);
 })();
 </script>

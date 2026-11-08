@@ -119,6 +119,14 @@ CREATE TABLE IF NOT EXISTS profile_settings (
     profile_id TEXT PRIMARY KEY,
     data TEXT NOT NULL,
     updated INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS lists (
+    profile_id TEXT NOT NULL,
+    category TEXT NOT NULL,
+    card_id TEXT NOT NULL,
+    card TEXT NOT NULL,
+    added INTEGER NOT NULL,
+    PRIMARY KEY (profile_id, category, card_id)
 );");
 
             if (Scalar(db, "SELECT COUNT(*) FROM pragma_table_info('profiles') WHERE name = 'age_limit'") == 0)
@@ -505,6 +513,61 @@ CREATE TABLE IF NOT EXISTS profile_settings (
             result[r.GetString(0)] = (keys, r.GetInt64(2));
         }
         return result;
+    }
+    #endregion
+
+    #region lists
+    /// <summary>Свои категории модуля — то, чего нет среди категорий Lampa</summary>
+    public static readonly string[] OwnCategories = { "rewatch" };
+
+    public class ListItem
+    {
+        public string category { get; set; }
+        public string card_id { get; set; }
+        public JObject card { get; set; }
+        public long added { get; set; }
+    }
+
+    public static List<ListItem> ListItems(string profileId)
+    {
+        var list = new List<ListItem>();
+        using var db = Open();
+        using var cmd = Command(db, "SELECT category, card_id, card, added FROM lists WHERE profile_id = $p ORDER BY added DESC", ("$p", profileId));
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            JObject card = null;
+            try { card = JObject.Parse(r.GetString(2)); } catch { }
+            list.Add(new ListItem { category = r.GetString(0), card_id = r.GetString(1), card = card ?? new JObject { ["id"] = r.GetString(1) }, added = r.GetInt64(3) });
+        }
+        return list;
+    }
+
+    public static void SetListItem(string profileId, string category, string cardId, JObject card, bool on)
+    {
+        lock (_lock)
+        {
+            using var db = Open();
+            if (on && card != null)
+            {
+                Exec(db, "INSERT INTO lists (profile_id, category, card_id, card, added) VALUES ($p, $c, $id, $card, $now) ON CONFLICT(profile_id, category, card_id) DO UPDATE SET card = excluded.card, added = excluded.added",
+                    ("$p", profileId), ("$c", category), ("$id", cardId), ("$card", card.ToString(Formatting.None)), ("$now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
+            }
+            else
+            {
+                Exec(db, "DELETE FROM lists WHERE profile_id = $p AND category = $c AND card_id = $id", ("$p", profileId), ("$c", category), ("$id", cardId));
+            }
+        }
+    }
+
+    /// <summary>Убрать карточку из всех своих категорий профиля</summary>
+    public static void RemoveListCard(string profileId, string cardId)
+    {
+        lock (_lock)
+        {
+            using var db = Open();
+            Exec(db, "DELETE FROM lists WHERE profile_id = $p AND card_id = $id", ("$p", profileId), ("$id", cardId));
+        }
     }
     #endregion
 
