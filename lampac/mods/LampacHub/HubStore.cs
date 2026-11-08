@@ -120,6 +120,18 @@ CREATE TABLE IF NOT EXISTS profile_settings (
     data TEXT NOT NULL,
     updated INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS import_queue (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    source TEXT NOT NULL,
+    ext_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    year INTEGER NOT NULL DEFAULT 0,
+    kind TEXT NOT NULL DEFAULT '',
+    categories TEXT NOT NULL,
+    candidates TEXT NOT NULL,
+    created INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS lists (
     profile_id TEXT NOT NULL,
     category TEXT NOT NULL,
@@ -328,6 +340,7 @@ CREATE TABLE IF NOT EXISTS lists (
             Exec(db, "UPDATE devices SET profile_id = NULL WHERE profile_id = $id", ("$id", id));
             bool ok = Exec(db, "DELETE FROM profiles WHERE id = $id", ("$id", id)) > 0;
             Exec(db, "DELETE FROM profile_settings WHERE profile_id = $id", ("$id", id));
+            Exec(db, "DELETE FROM import_queue WHERE profile_id = $id", ("$id", id));
             if (ok)
                 RefreshChildren();
             return ok;
@@ -567,6 +580,82 @@ CREATE TABLE IF NOT EXISTS lists (
         {
             using var db = Open();
             Exec(db, "DELETE FROM lists WHERE profile_id = $p AND card_id = $id", ("$p", profileId), ("$id", cardId));
+        }
+    }
+    #endregion
+
+    #region import queue
+    /// <summary>Тайтл импорта, который не удалось сопоставить с TMDB автоматически</summary>
+    public class QueueItem
+    {
+        public string id { get; set; }
+        public string profile_id { get; set; }
+        public string source { get; set; }
+        public string ext_id { get; set; }
+        public string title { get; set; }
+        public int year { get; set; }
+        public string kind { get; set; }
+        public List<string> categories { get; set; }
+        public JArray candidates { get; set; }
+        public long created { get; set; }
+    }
+
+    /// <summary>Повторный импорт того же тайтла заменяет прежнюю запись очереди</summary>
+    public static void QueueAdd(QueueItem item)
+    {
+        string id = Hash(item.profile_id + "|" + item.source + "|" + item.ext_id).Substring(0, 16).ToLowerInvariant();
+        lock (_lock)
+        {
+            using var db = Open();
+            Exec(db, @"INSERT INTO import_queue (id, profile_id, source, ext_id, title, year, kind, categories, candidates, created)
+VALUES ($id, $p, $s, $e, $t, $y, $k, $c, $cand, $now)
+ON CONFLICT(id) DO UPDATE SET title = excluded.title, year = excluded.year, kind = excluded.kind, categories = excluded.categories, candidates = excluded.candidates, created = excluded.created",
+                ("$id", id), ("$p", item.profile_id), ("$s", item.source), ("$e", item.ext_id), ("$t", item.title ?? string.Empty),
+                ("$y", item.year), ("$k", item.kind ?? string.Empty), ("$c", JsonConvert.SerializeObject(item.categories ?? new List<string>())),
+                ("$cand", (item.candidates ?? new JArray()).ToString(Formatting.None)), ("$now", Now()));
+        }
+    }
+
+    public static List<QueueItem> QueueList(string profileId = null)
+    {
+        var list = new List<QueueItem>();
+        using var db = Open();
+        using var cmd = string.IsNullOrEmpty(profileId)
+            ? Command(db, "SELECT id, profile_id, source, ext_id, title, year, kind, categories, candidates, created FROM import_queue ORDER BY created, title")
+            : Command(db, "SELECT id, profile_id, source, ext_id, title, year, kind, categories, candidates, created FROM import_queue WHERE profile_id = $p ORDER BY created, title", ("$p", profileId));
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            var item = new QueueItem
+            {
+                id = r.GetString(0), profile_id = r.GetString(1), source = r.GetString(2), ext_id = r.GetString(3),
+                title = r.GetString(4), year = r.GetInt32(5), kind = r.GetString(6), created = r.GetInt64(9)
+            };
+            try { item.categories = JsonConvert.DeserializeObject<List<string>>(r.GetString(7)); } catch { item.categories = new List<string>(); }
+            try { item.candidates = JArray.Parse(r.GetString(8)); } catch { item.candidates = new JArray(); }
+            list.Add(item);
+        }
+        return list;
+    }
+
+    public static QueueItem QueueGet(string id)
+        => QueueList().Find(i => i.id == id);
+
+    public static int QueueDelete(string id)
+    {
+        lock (_lock)
+        {
+            using var db = Open();
+            return Exec(db, "DELETE FROM import_queue WHERE id = $id", ("$id", id));
+        }
+    }
+
+    public static int QueueClear(string profileId)
+    {
+        lock (_lock)
+        {
+            using var db = Open();
+            return Exec(db, "DELETE FROM import_queue WHERE profile_id = $p", ("$p", profileId));
         }
     }
     #endregion

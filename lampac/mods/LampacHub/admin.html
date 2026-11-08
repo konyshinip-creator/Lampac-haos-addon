@@ -45,6 +45,11 @@
   .star{background:transparent;border:0;font-size:20px;padding:0 6px;color:#666;cursor:pointer}
   .star.on{color:#ffc83d}
   #lBulk{margin:10px 0;padding:8px 10px;border:1px dashed var(--line);border-radius:10px}
+  .cand{display:inline-flex;gap:6px;align-items:center;padding:4px 8px 4px 4px;margin:3px 6px 3px 0;border:1px solid #3a404c;border-radius:8px;background:transparent;color:inherit;font-weight:500;text-align:left}
+  .cand img,.cand .poster{width:28px;height:42px}
+  .cand:hover{border-color:var(--accent)}
+  .qitem{border-bottom:1px solid var(--line);padding:10px 0}
+  #iState{white-space:pre-line}
   @media (max-width:640px){.hide-sm{display:none}}
 </style>
 </head>
@@ -109,6 +114,35 @@
     </div>
     <div class="scroll"><table id="lists"></table></div>
     <div class="row" style="margin-top:8px"><button class="ghost" id="lMore" style="display:none">Показать ещё</button></div>
+  </section>
+
+  <section>
+    <h2>Импорт</h2>
+    <p class="muted">Импорт добавляет тайтлы в списки выбранного профиля: статусы переносятся 1:1, Любимые попадают в Избранное. Тайтлы сопоставляются с TMDB по id MAL/Shikimori (таблица Fribb/anime-lists), а если не получилось — по названию и году. Что не сопоставилось само, попадает в очередь ниже. Сезоны одного сериала в TMDB становятся одной карточкой.</p>
+    <div class="row">
+      <span class="muted">Профиль</span>
+      <select id="iProfile"></select>
+    </div>
+    <h2 style="margin-top:14px">Yummy Anime</h2>
+    <div class="row">
+      <input id="iYummyUser" placeholder="Ник, id или ссылка на профиль Yummy" style="flex:1;min-width:14em">
+      <input id="iYummyToken" type="password" placeholder="Токен (только для закрытых списков)" autocomplete="off" style="flex:1;min-width:12em">
+      <button id="iYummyGo">Импортировать</button>
+    </div>
+    <p class="muted">Публичные списки читаются без входа. Если списки закрыты, откройте их в настройках приватности Yummy или вставьте токен входа. Токен нужен только на время импорта и нигде не сохраняется. Пароль от Yummy не нужен.</p>
+    <h2 style="margin-top:14px">Резервная копия Lampa / CUB</h2>
+    <div class="row">
+      <button class="ghost" id="iLampa">Загрузить файл…</button>
+      <input type="file" id="iLampaFile" accept=".json,application/json,text/plain" hidden>
+      <span class="muted">JSON с ключом <code>favorite</code>: копия localStorage Lampa или бэкап. Тайтлы там уже с id TMDB.</span>
+    </div>
+    <div id="iState" class="muted" style="margin-top:12px"></div>
+    <h2 style="margin-top:14px">Ручное сопоставление <span class="muted" id="iQCount"></span></h2>
+    <div class="row" style="margin-bottom:8px">
+      <button class="ghost" id="iQReload">Обновить</button>
+      <button class="danger" id="iQClear">Очистить очередь профиля</button>
+    </div>
+    <div id="iQueue"></div>
   </section>
 
   <section>
@@ -406,7 +440,7 @@
     }
   });
 
-  load().then(function () { if (state) { renderListsControls(); loadLists(); } });
+  load().then(function () { if (state) { renderListsControls(); loadLists(); renderImportControls(); loadQueue(); pollImport(); } });
   // --- списки ---------------------------------------------------------------
   var CATS = [
     ['look', 'Смотрю'], ['scheduled', 'Планирую'], ['viewed', 'Просмотрено'], ['continued', 'Отложено'],
@@ -599,12 +633,134 @@
     }).catch(function (e) { toast(e.message); });
   };
 
+  // --- импорт ---------------------------------------------------------------
+  var imp = { profile: '0', timer: null, queue: [] };
+
+  function impProfile() { return $('iProfile').value || imp.profile || '0'; }
+
+  function renderImportControls() {
+    if (!state) return;
+    var keep = $('iProfile').value || imp.profile;
+    $('iProfile').innerHTML = profileOptions(keep);
+  }
+
+  function renderImportState(r) {
+    var s = r && r.state;
+    if (!s || !s.started) { $('iState').textContent = ''; return; }
+    var lines = [];
+    lines.push((s.running ? '⏳ ' : (s.error ? '⚠️ ' : '✅ ')) + (s.source === 'yummy' ? 'Yummy' : s.source) + ' → «' + (findProfile(s.profile_id).name || s.profile_id) + '»: ' + (s.stage || ''));
+    if (s.total) lines.push('Обработано ' + s.processed + ' из ' + s.total + ' · по id ' + s.by_ids + ' · по названию ' + s.by_search + ' · в очередь ' + s.queued);
+    if (!s.running && !s.error && s.finished) lines.push('Записано карточек: ' + s.imported + (s.merged ? ' (сезоны объединены: ' + s.merged + ')' : ''));
+    if (s.error) lines.push('Ошибка: ' + s.error);
+    (s.notes || []).forEach(function (n) { lines.push('· ' + n); });
+    $('iState').textContent = lines.join('\n');
+  }
+
+  function pollImport() {
+    clearTimeout(imp.timer);
+    return api('/hub/api/import/state').then(function (r) {
+      renderImportState(r);
+      var n = (r.queue || {})[impProfile()] || 0;
+      $('iQCount').textContent = n ? '(' + n + ')' : '';
+      if (r.state && r.state.running) imp.timer = setTimeout(pollImport, 2000);
+      else if (imp.wasRunning) { imp.wasRunning = false; loadQueue(); if (typeof loadLists === 'function') loadLists(); }
+      if (r.state && r.state.running) imp.wasRunning = true;
+    }).catch(function () { });
+  }
+
+  function candButton(qid, c) {
+    var img = posterUrl(c.poster);
+    return '<button class="cand" data-qres="' + esc(qid) + '" data-kind="' + esc(c.kind) + '" data-tid="' + esc(c.id) + '">' +
+      (img ? '<img class="poster" src="' + esc(img) + '" alt="">' : '<span class="poster"></span>') +
+      '<span><b>' + esc(c.title) + '</b> <span class="muted">' + esc([c.year, c.kind === 'tv' ? 'сериал' : 'фильм'].filter(Boolean).join(' · ')) + '</span>' +
+      (c.original && c.original !== c.title ? '<br><span class="muted">' + esc(c.original) + '</span>' : '') + '</span></button>';
+  }
+
+  function renderQueue() {
+    $('iQCount').textContent = imp.queue.length ? '(' + imp.queue.length + ')' : '';
+    $('iQueue').innerHTML = imp.queue.length ? imp.queue.slice(0, 50).map(function (q) {
+      var cats = (q.categories || []).map(function (c) { return '<span class="chip">' + esc(catName[c] || c) + '</span>'; }).join('');
+      return '<div class="qitem" data-q="' + esc(q.id) + '"><div><b>' + esc(q.title) + '</b> <span class="muted">' + esc([q.year || '', q.source, q.kind === 'movie' ? 'фильм' : q.kind === 'tv' ? 'сериал' : ''].filter(Boolean).join(' · ')) + '</span> ' + cats + '</div>' +
+        '<div class="qc">' + ((q.candidates || []).map(function (c) { return candButton(q.id, c); }).join('') || '<span class="muted">Кандидатов нет — найдите вручную.</span>') + '</div>' +
+        '<div class="row" style="margin-top:6px"><input data-qq="' + esc(q.id) + '" value="' + esc(q.title) + '" style="flex:1;min-width:10em">' +
+        '<select data-qk="' + esc(q.id) + '"><option value="">все</option><option value="tv">сериалы</option><option value="movie">фильмы</option></select>' +
+        '<button class="ghost" data-qsearch="' + esc(q.id) + '">Найти в TMDB</button>' +
+        '<button class="ghost" data-qskip="' + esc(q.id) + '">Пропустить</button></div></div>';
+    }).join('') + (imp.queue.length > 50 ? '<p class="muted">Показаны первые 50 из ' + imp.queue.length + '.</p>' : '') : '<span class="muted">Очередь пуста.</span>';
+  }
+
+  function loadQueue() {
+    imp.profile = impProfile();
+    return api('/hub/api/import/queue?profile_id=' + encodeURIComponent(imp.profile)).then(function (r) {
+      imp.queue = r.items || [];
+      renderQueue();
+    }).catch(function (e) { toast(e.message); });
+  }
+
+  $('iProfile').onchange = function () { loadQueue(); pollImport(); };
+  $('iQReload').onclick = loadQueue;
+  $('iQClear').onclick = function () {
+    if (!confirm('Убрать из очереди все несопоставленные тайтлы профиля? В списки они не попадут.')) return;
+    api('/hub/api/import/queue/skip', { profile_id: impProfile(), all: true }).then(loadQueue).catch(function (e) { toast(e.message); });
+  };
+
+  $('iYummyGo').onclick = function () {
+    var user = $('iYummyUser').value.trim();
+    if (!user) { toast('Укажите ник, id или ссылку на профиль Yummy'); return; }
+    var name = findProfile(impProfile()).name || impProfile();
+    if (!confirm('Импортировать списки Yummy «' + user + '» в профиль «' + name + '»?')) return;
+    api('/hub/api/import/yummy', { profile_id: impProfile(), user: user, token: $('iYummyToken').value.trim() })
+      .then(function () { $('iYummyToken').value = ''; imp.wasRunning = true; pollImport(); })
+      .catch(function (e) { toast(e.message); });
+  };
+
+  $('iLampa').onclick = function () { $('iLampaFile').value = ''; $('iLampaFile').click(); };
+  $('iLampaFile').onchange = function () {
+    var file = this.files[0];
+    if (!file) return;
+    var name = findProfile(impProfile()).name || impProfile();
+    if (!confirm('Импортировать закладки из «' + file.name + '» в профиль «' + name + '»?')) return;
+    fetch('/hub/api/import/lampa?profile_id=' + encodeURIComponent(impProfile()), {
+      method: 'POST', credentials: 'same-origin', headers: { 'X-Hub': '1', 'Content-Type': 'application/json' }, body: file
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
+    }).then(function (r) {
+      toast('Импортировано из резервной копии: ' + r.count);
+      if (typeof loadLists === 'function') loadLists();
+    }).catch(function (e) { toast(e.message); });
+  };
+
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest ? e.target.closest('[data-qres],[data-qsearch],[data-qskip]') : null;
+    if (!t) return;
+    var id;
+    if ((id = t.getAttribute('data-qres'))) {
+      api('/hub/api/import/queue/resolve', { id: id, kind: t.getAttribute('data-kind'), tmdb_id: t.getAttribute('data-tid') })
+        .then(function () { toast('Добавлено'); imp.queue = imp.queue.filter(function (q) { return q.id !== id; }); renderQueue(); })
+        .catch(function (err) { toast(err.message); });
+    }
+    else if ((id = t.getAttribute('data-qsearch'))) {
+      var q = document.querySelector('input[data-qq="' + id + '"]').value.trim();
+      var kind = document.querySelector('select[data-qk="' + id + '"]').value;
+      var box = document.querySelector('[data-q="' + id + '"] .qc');
+      box.innerHTML = '<span class="muted">Поиск…</span>';
+      api('/hub/api/tmdb/search?q=' + encodeURIComponent(q) + '&kind=' + encodeURIComponent(kind)).then(function (r) {
+        box.innerHTML = (r.results || []).map(function (c) { return candButton(id, c); }).join('') || '<span class="muted">Ничего не найдено.</span>';
+      }).catch(function (err) { box.innerHTML = ''; toast(err.message); });
+    }
+    else if ((id = t.getAttribute('data-qskip'))) {
+      api('/hub/api/import/queue/skip', { id: id }).then(function () {
+        imp.queue = imp.queue.filter(function (q) { return q.id !== id; }); renderQueue();
+      }).catch(function (err) { toast(err.message); });
+    }
+  });
+
   // Ожидающие коды появляются, пока страница открыта; не перерисовываем, если что-то редактируется
   setInterval(function () {
     var a = document.activeElement;
     if (a && (a.tagName === 'INPUT' || a.tagName === 'SELECT')) return;
     if ($('picker').style.display === 'flex') return;
-    load().then(renderListsControls);
+    load().then(function () { renderListsControls(); renderImportControls(); });
   }, 4000);
 })();
 </script>
