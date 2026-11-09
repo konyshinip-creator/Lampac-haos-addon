@@ -398,3 +398,393 @@ public static class LampaBackupSource
         return null;
     }
 }
+
+/// <summary>Статусы Shikimori / MyAnimeList → категории Lampa</summary>
+static class RateStatus
+{
+    public static string Map(string status) => (status ?? string.Empty).Trim().ToLowerInvariant().Replace(" ", "_").Replace("-", "_") switch
+    {
+        "watching" or "1" => "look",
+        "rewatching" => "rewatch",
+        "planned" or "plan_to_watch" or "6" => "scheduled",
+        "completed" or "2" => "viewed",
+        "on_hold" or "onhold" or "3" => "continued",
+        "dropped" or "4" => "thrown",
+        _ => null
+    };
+
+    /// <summary>Вид тайтла Shikimori / MAL → tv, movie или пусто</summary>
+    public static string Kind(string kind) => (kind ?? string.Empty).Trim().ToLowerInvariant() switch
+    {
+        "movie" => "movie",
+        "tv" or "tv_13" or "tv_24" or "tv_48" or "ona" or "ova" or "special" or "tv_special" => "tv",
+        _ => string.Empty
+    };
+
+    public static int Year(string date)
+    {
+        var m = Regex.Match(date ?? string.Empty, @"(19|20)\d{2}");
+        return m.Success ? int.Parse(m.Value) : 0;
+    }
+
+    public static int? Int(JToken t)
+    {
+        if (t == null || t.Type == JTokenType.Null)
+            return null;
+        return int.TryParse(t.ToString(), out int v) && v > 0 ? v : null;
+    }
+
+    public static void Add(ExternalTitle t, string category)
+    {
+        if (!string.IsNullOrEmpty(category) && !t.categories.Contains(category))
+            t.categories.Add(category);
+    }
+
+    /// <summary>Ник из ссылки на профиль: shikimori.io/Nick, myanimelist.net/profile/Nick, …/animelist/Nick</summary>
+    public static string User(string value, string pattern)
+    {
+        value = (value ?? string.Empty).Trim();
+        var m = Regex.Match(value, pattern, RegexOptions.IgnoreCase);
+        return Uri.UnescapeDataString((m.Success ? m.Groups[1].Value : value).Trim('/', ' '));
+    }
+
+    public static HttpClient Http()
+    {
+        var http = new HttpClient(new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All }) { Timeout = TimeSpan.FromSeconds(60) };
+        // Shikimori требует осмысленный User-Agent с именем приложения
+        http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "LampacHub");
+        http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        return http;
+    }
+}
+
+/// <summary>
+/// Shikimori (shikimori.io/api). Открытые списки читаются по нику без входа:
+/// /users/{id}/anime_rates — всё со статусами, /users/{id}/favourites — «Избранное» → like.
+/// id Shikimori у аниме совпадает с id MyAnimeList.
+/// </summary>
+public static class ShikimoriSource
+{
+    public static async Task<List<ExternalTitle>> Fetch(string user, ImportState state)
+    {
+        string nick = RateStatus.User(user, @"shikimori\.[a-z]+/([^/?#]+)");
+        if (string.IsNullOrEmpty(nick))
+            throw new InvalidOperationException("Укажите ник или ссылку на профиль Shikimori");
+
+        string api = (string.IsNullOrWhiteSpace(ModInit.conf.shikimori_api) ? "https://shikimori.io" : ModInit.conf.shikimori_api.Trim()).TrimEnd('/') + "/api";
+        using var http = RateStatus.Http();
+
+        async Task<JToken> Get(string path)
+        {
+            using var resp = await http.GetAsync(api + path);
+            if (resp.StatusCode == HttpStatusCode.NotFound)
+                throw new InvalidOperationException("Shikimori: пользователь не найден");
+            if (resp.StatusCode == HttpStatusCode.Forbidden || resp.StatusCode == HttpStatusCode.Unauthorized)
+                throw new InvalidOperationException("Shikimori: список закрыт настройками приватности профиля");
+            if ((int)resp.StatusCode == 429)
+                throw new InvalidOperationException("Shikimori: слишком много запросов, попробуйте через минуту");
+            if (!resp.IsSuccessStatusCode)
+                throw new InvalidOperationException("Shikimori ответил " + (int)resp.StatusCode);
+            return JToken.Parse(await resp.Content.ReadAsStringAsync());
+        }
+
+        state.stage = "Загрузка списков Shikimori";
+        string id = nick.All(char.IsDigit) ? nick : (await Get("/users/" + Uri.EscapeDataString(nick) + "?is_nickname=1"))?["id"]?.ToString();
+        if (string.IsNullOrEmpty(id))
+            throw new InvalidOperationException("Shikimori: пользователь не найден");
+
+        var titles = new Dictionary<string, ExternalTitle>();
+
+        for (int page = 1; page <= 20; page++)
+        {
+            var rates = await Get("/users/" + id + "/anime_rates?limit=5000&page=" + page) as JArray ?? new JArray();
+            foreach (var r in rates.OfType<JObject>())
+            {
+                var a = r["anime"] as JObject;
+                string animeId = a?["id"]?.ToString();
+                if (string.IsNullOrEmpty(animeId))
+                    continue;
+
+                if (!titles.TryGetValue(animeId, out var t))
+                {
+                    titles[animeId] = t = new ExternalTitle
+                    {
+                        source = "shikimori",
+                        ext_id = animeId,
+                        title = (string)a["russian"] is string ru && ru.Length > 0 ? ru : (string)a["name"] ?? animeId,
+                        year = RateStatus.Year((string)a["aired_on"]),
+                        kind = RateStatus.Kind((string)a["kind"]),
+                        mal_id = RateStatus.Int(a["id"])
+                    };
+                    if (!string.IsNullOrEmpty((string)a["name"]) && (string)a["name"] != t.title)
+                        t.alt_titles.Add((string)a["name"]);
+                }
+
+                RateStatus.Add(t, RateStatus.Map((string)r["status"]));
+            }
+
+            // Shikimori отдаёт limit + 1 запись, если есть следующая страница
+            if (rates.Count <= 5000)
+                break;
+        }
+
+        try
+        {
+            var fav = await Get("/users/" + id + "/favourites");
+            foreach (var a in (fav?["animes"] as JArray ?? new JArray()).OfType<JObject>())
+            {
+                string animeId = a["id"]?.ToString();
+                if (string.IsNullOrEmpty(animeId))
+                    continue;
+
+                if (!titles.TryGetValue(animeId, out var t))
+                {
+                    titles[animeId] = t = new ExternalTitle
+                    {
+                        source = "shikimori",
+                        ext_id = animeId,
+                        title = (string)a["russian"] is string ru && ru.Length > 0 ? ru : (string)a["name"] ?? animeId,
+                        kind = string.Empty,
+                        mal_id = RateStatus.Int(a["id"])
+                    };
+                }
+                RateStatus.Add(t, "like");
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            state.notes.Add("Избранное не загрузилось: " + ex.Message);
+        }
+
+        var list = titles.Values.Where(t => t.categories.Count > 0).ToList();
+        state.notes.Add("Shikimori: " + list.Count + " тайтлов в списках, из них в «Избранном» " + list.Count(t => t.categories.Contains("like")));
+        return list;
+    }
+}
+
+/// <summary>
+/// MyAnimeList: открытый список читается без входа и без ключа API через
+/// myanimelist.net/animelist/{nick}/load.json (по 300 записей).
+/// </summary>
+public static class MalSource
+{
+    public static async Task<List<ExternalTitle>> Fetch(string user, ImportState state)
+    {
+        string nick = RateStatus.User(user, @"myanimelist\.net/(?:profile|animelist)/([^/?#]+)");
+        if (string.IsNullOrEmpty(nick))
+            throw new InvalidOperationException("Укажите ник или ссылку на профиль MyAnimeList");
+
+        using var http = RateStatus.Http();
+        state.stage = "Загрузка списка MyAnimeList";
+
+        var titles = new Dictionary<string, ExternalTitle>();
+        for (int offset = 0; offset < 30000; offset += 300)
+        {
+            using var resp = await http.GetAsync("https://myanimelist.net/animelist/" + Uri.EscapeDataString(nick) + "/load.json?status=7&offset=" + offset);
+            if (resp.StatusCode == HttpStatusCode.NotFound)
+                throw new InvalidOperationException("MyAnimeList: пользователь не найден");
+            if (resp.StatusCode == HttpStatusCode.BadRequest || resp.StatusCode == HttpStatusCode.Forbidden || resp.StatusCode == HttpStatusCode.Unauthorized)
+                throw new InvalidOperationException("MyAnimeList: список закрыт или недоступен. Сделайте его открытым или загрузите файл экспорта (XML)");
+            if ((int)resp.StatusCode == 429)
+                throw new InvalidOperationException("MyAnimeList: слишком много запросов, попробуйте позже");
+            if (!resp.IsSuccessStatusCode)
+                throw new InvalidOperationException("MyAnimeList ответил " + (int)resp.StatusCode);
+
+            var page = JToken.Parse(await resp.Content.ReadAsStringAsync()) as JArray ?? new JArray();
+            foreach (var a in page.OfType<JObject>())
+            {
+                string animeId = a["anime_id"]?.ToString();
+                if (string.IsNullOrEmpty(animeId) || titles.ContainsKey(animeId))
+                    continue;
+
+                var t = new ExternalTitle
+                {
+                    source = "mal",
+                    ext_id = animeId,
+                    title = a["anime_title"]?.ToString() ?? animeId,
+                    year = RateStatus.Year((string)a["anime_start_date_string"]),
+                    kind = RateStatus.Kind((string)a["anime_media_type_string"]),
+                    mal_id = RateStatus.Int(a["anime_id"])
+                };
+                string eng = a["anime_title_eng"]?.ToString();
+                if (!string.IsNullOrEmpty(eng) && eng != t.title)
+                    t.alt_titles.Add(eng);
+
+                bool rewatching = a["is_rewatching"]?.ToString() is "1" or "True" or "true";
+                RateStatus.Add(t, rewatching ? "rewatch" : RateStatus.Map(a["status"]?.ToString()));
+                if (t.categories.Count > 0)
+                    titles[animeId] = t;
+            }
+
+            if (page.Count < 300)
+                break;
+            await Task.Delay(500);
+        }
+
+        var list = titles.Values.ToList();
+        state.notes.Add("MyAnimeList: " + list.Count + " тайтлов в списке");
+        return list;
+    }
+}
+
+/// <summary>
+/// Файл экспорта списков, формат определяется по содержимому:
+/// JSON Shikimori / Yummy (target_id, status), HTML Yummy (data-list-id, data-shiki-id),
+/// XML MyAnimeList / Shikimori (myanimelist → anime → series_animedb_id, my_status), можно .gz.
+/// </summary>
+public static class ExportFileSource
+{
+    /// <summary>Списки HTML-экспорта Yummy: 0 Смотрю, 1 В планах, 2 Просмотрено, 3 Брошено, 4 Любимые, 5 Отложено</summary>
+    static readonly Dictionary<string, string> YummyLists = new()
+    {
+        ["0"] = "look",
+        ["1"] = "scheduled",
+        ["2"] = "viewed",
+        ["3"] = "thrown",
+        ["4"] = "like",
+        ["5"] = "continued"
+    };
+
+    public static (string source, List<ExternalTitle> titles) Parse(byte[] data)
+    {
+        if (data.Length > 2 && data[0] == 0x1f && data[1] == 0x8b)
+        {
+            using var gz = new System.IO.Compression.GZipStream(new System.IO.MemoryStream(data), System.IO.Compression.CompressionMode.Decompress);
+            using var ms = new System.IO.MemoryStream();
+            gz.CopyTo(ms);
+            data = ms.ToArray();
+        }
+
+        string text = System.Text.Encoding.UTF8.GetString(data).TrimStart('﻿', ' ', '\r', '\n', '\t');
+
+        if (text.StartsWith("[") || text.StartsWith("{"))
+            return Json(JToken.Parse(text));
+
+        if (Regex.IsMatch(text, @"<myanimelist[\s>]", RegexOptions.IgnoreCase))
+            return Xml(text);
+
+        if (Regex.IsMatch(text, @"data-list-id\s*=", RegexOptions.IgnoreCase))
+            return ("yummy", Html(text));
+
+        throw new InvalidOperationException("Неизвестный формат файла. Подходят экспорт Yummy (JSON или HTML), Shikimori (JSON или XML) и MyAnimeList (XML)");
+    }
+
+    static (string, List<ExternalTitle>) Json(JToken doc)
+    {
+        var rows = doc as JArray ?? (doc["anime"] ?? doc["animes"] ?? doc["data"]) as JArray;
+        if (rows == null)
+            throw new InvalidOperationException("В файле нет списка тайтлов");
+
+        // Yummy кладёт свой id (ya_id) рядом с id Shikimori; у Shikimori его нет
+        string source = rows.OfType<JObject>().Any(r => r["ya_id"] != null) ? "yummy" : "shikimori";
+        var titles = new Dictionary<string, ExternalTitle>();
+
+        foreach (var r in rows.OfType<JObject>())
+        {
+            string type = (string)r["target_type"];
+            if (!string.IsNullOrEmpty(type) && !type.Equals("Anime", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            string shiki = r["target_id"]?.ToString();
+            string id = r["ya_id"]?.ToString() is string ya && ya.Length > 0 ? ya : shiki;
+            if (string.IsNullOrEmpty(id))
+                continue;
+
+            if (!titles.TryGetValue(id, out var t))
+            {
+                titles[id] = t = new ExternalTitle
+                {
+                    source = source,
+                    ext_id = id,
+                    title = (string)r["target_title_ru"] is string ru && ru.Length > 0 ? ru : (string)r["target_title"] ?? id,
+                    kind = string.Empty,
+                    mal_id = RateStatus.Int(r["target_id"])
+                };
+                string en = (string)r["target_title"];
+                if (!string.IsNullOrEmpty(en) && en != t.title)
+                    t.alt_titles.Add(en);
+            }
+
+            RateStatus.Add(t, (int?)r["rewatches"] > 0 && (string)r["status"] == "watching" ? "rewatch" : RateStatus.Map((string)r["status"]));
+            if (r["is_fav"]?.Type == JTokenType.Boolean && (bool)r["is_fav"])
+                RateStatus.Add(t, "like");
+        }
+
+        return (source, titles.Values.Where(t => t.categories.Count > 0).ToList());
+    }
+
+    static (string, List<ExternalTitle>) Xml(string text)
+    {
+        static string Tag(string block, string name)
+        {
+            var m = Regex.Match(block, "<" + name + @">\s*(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?\s*</" + name + ">", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            return m.Success ? WebUtility.HtmlDecode(m.Groups[1].Value).Trim() : string.Empty;
+        }
+
+        string source = Regex.IsMatch(text, "<user_export_type>|<my_watched_episodes>", RegexOptions.IgnoreCase) ? "mal" : "shikimori";
+        var titles = new List<ExternalTitle>();
+
+        foreach (Match a in Regex.Matches(text, @"<anime>(.*?)</anime>", RegexOptions.Singleline | RegexOptions.IgnoreCase))
+        {
+            string block = a.Groups[1].Value;
+            string id = Tag(block, "series_animedb_id");
+            if (string.IsNullOrEmpty(id))
+                continue;
+
+            var t = new ExternalTitle
+            {
+                source = source,
+                ext_id = id,
+                title = Tag(block, "series_title") is string name && name.Length > 0 ? name : id,
+                kind = RateStatus.Kind(Tag(block, "series_type")),
+                mal_id = int.TryParse(id, out int mal) && mal > 0 ? mal : null
+            };
+
+            RateStatus.Add(t, Tag(block, "my_rewatching") == "1" ? "rewatch" : RateStatus.Map(Tag(block, "my_status")));
+            if (t.categories.Count > 0)
+                titles.Add(t);
+        }
+
+        return (source, titles);
+    }
+
+    static List<ExternalTitle> Html(string text)
+    {
+        var titles = new Dictionary<string, ExternalTitle>();
+
+        // Колонки <td data-list-id="N"> … </td>, в них <li data-shiki-id data-id>Название</li>
+        foreach (Match col in Regex.Matches(text, @"<td[^>]*data-list-id\s*=\s*""(\d+)""[^>]*>(.*?)</td>", RegexOptions.Singleline | RegexOptions.IgnoreCase))
+        {
+            if (!YummyLists.TryGetValue(col.Groups[1].Value, out string category))
+                continue;
+
+            foreach (Match li in Regex.Matches(col.Groups[2].Value, @"<li([^>]*)>(.*?)</li>", RegexOptions.Singleline | RegexOptions.IgnoreCase))
+            {
+                string attrs = li.Groups[1].Value;
+                string shiki = Regex.Match(attrs, @"data-shiki-id\s*=\s*""(\d+)""").Groups[1].Value;
+                string yid = Regex.Match(attrs, @"data-id\s*=\s*""(\d+)""").Groups[1].Value;
+                string key = string.IsNullOrEmpty(yid) ? "s" + shiki : yid;
+                if (key == "s")
+                    continue;
+
+                // Название — текст до вложенных тегов (оценка <vote>)
+                string title = WebUtility.HtmlDecode(Regex.Replace(Regex.Replace(li.Groups[2].Value, @"<vote.*?</vote>", string.Empty, RegexOptions.Singleline), "<[^>]+>", string.Empty)).Trim();
+
+                if (!titles.TryGetValue(key, out var t))
+                {
+                    titles[key] = t = new ExternalTitle
+                    {
+                        source = "yummy",
+                        ext_id = key,
+                        title = string.IsNullOrEmpty(title) ? key : title,
+                        kind = string.Empty,
+                        mal_id = int.TryParse(shiki, out int mal) && mal > 0 ? mal : null
+                    };
+                }
+                RateStatus.Add(t, category);
+            }
+        }
+
+        return titles.Values.ToList();
+    }
+}

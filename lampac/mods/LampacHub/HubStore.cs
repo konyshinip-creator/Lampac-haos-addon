@@ -5,6 +5,7 @@ using Shared.Services;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -131,6 +132,11 @@ CREATE TABLE IF NOT EXISTS import_queue (
     categories TEXT NOT NULL,
     candidates TEXT NOT NULL,
     created INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS title_info (
+    key TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    updated INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS lists (
     profile_id TEXT NOT NULL,
@@ -656,6 +662,40 @@ ON CONFLICT(id) DO UPDATE SET title = excluded.title, year = excluded.year, kind
         {
             using var db = Open();
             return Exec(db, "DELETE FROM import_queue WHERE profile_id = $p", ("$p", profileId));
+        }
+    }
+    #endregion
+
+    #region title info
+    /// <summary>Кеш сведений TMDB о тайтлах (сезоны, серии, статус): key = tv:123 / movie:123</summary>
+    public static Dictionary<string, (JObject data, long updated)> InfoGet(IEnumerable<string> keys)
+    {
+        var result = new Dictionary<string, (JObject, long)>();
+        var list = keys.Distinct().ToList();
+        if (list.Count == 0)
+            return result;
+
+        using var db = Open();
+        foreach (var chunk in list.Chunk(200))
+        {
+            var args = chunk.Select((k, i) => ("$k" + i, (object)k)).ToArray();
+            using var cmd = Command(db, "SELECT key, data, updated FROM title_info WHERE key IN (" + string.Join(",", args.Select(a => a.Item1)) + ")", args);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                try { result[r.GetString(0)] = (JObject.Parse(r.GetString(1)), r.GetInt64(2)); } catch { }
+            }
+        }
+        return result;
+    }
+
+    public static void InfoSet(string key, JObject data)
+    {
+        lock (_lock)
+        {
+            using var db = Open();
+            Exec(db, "INSERT INTO title_info (key, data, updated) VALUES ($k, $d, $now) ON CONFLICT(key) DO UPDATE SET data = excluded.data, updated = excluded.updated",
+                ("$k", key), ("$d", data.ToString(Formatting.None)), ("$now", Now()));
         }
     }
     #endregion

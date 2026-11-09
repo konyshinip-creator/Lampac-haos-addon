@@ -44,6 +44,10 @@
   button:disabled{opacity:.35;cursor:not-allowed;filter:none;box-shadow:none}
   button.sm{padding:3px 10px;font-size:13px}
   td input[data-f=name]{width:100%;min-width:9em}
+  tfoot td{border-bottom:0;padding-top:14px}
+  tr.newrow td{background:var(--card2)}
+  tr.newrow td:first-child{border-radius:10px 0 0 10px}
+  tr.newrow td:last-child{border-radius:0 10px 10px 0}
   button.ghost{background:var(--chip);border:0;color:inherit;font-weight:500}
   button.ghost:hover{background:var(--ph);box-shadow:none}
   button.danger{background:transparent;border:1px solid var(--danger);color:var(--danger);font-weight:500}
@@ -119,13 +123,20 @@
   .pc .ov{position:absolute;top:8px;left:8px;right:8px;display:flex;align-items:center;justify-content:space-between;padding:3px 6px;border-radius:999px;background:rgba(33,31,27,.38);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);line-height:0}
   .pc .ov .star{font-size:19px;padding:0 2px;color:rgba(255,255,255,.75);line-height:1}
   .pc .ov .star.on{color:#ffd24a}
+  .pc .ovr{display:flex;align-items:center;gap:2px}
+  .pc .ov .del{font-size:14px;padding:0 4px;color:rgba(255,255,255,.75);line-height:1;background:none;border:0}
+  .pc .ov .del:hover{color:#fff;background:var(--danger);border-radius:999px}
+  .info{font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;margin-top:2px}
+  .info .ist{color:var(--c);font-weight:600}
+  .info .inext{flex-basis:100%;color:var(--text)}
   .pc .badge-st{position:absolute;left:8px;bottom:8px;padding:2px 9px;border-radius:999px;font-size:12px;color:#fff;background:var(--c,#555)}
   .pc .body{padding:9px 2px 0;display:flex;flex-direction:column;gap:4px;flex:1}
   .pc .t{font-weight:500;font-size:15px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .pc .meta{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
   .rate{border:1px solid currentColor;color:var(--text);border-radius:4px;padding:0 4px;font-weight:700;font-size:12px;line-height:16px}
   .dot{width:4px;height:4px;border-radius:50%;background:var(--accent-dark)}
-  .pc select{width:100%;padding:5px 8px;font-size:13px;margin-top:6px}
+  .pc select{width:100%;padding:5px 8px;font-size:13px;margin-top:auto}
+  .pc .body .info + select,.pc .body .meta + select{margin-top:auto}
   details summary{cursor:pointer;color:var(--muted);font-size:13px;margin-top:12px}
   .empty{padding:30px;text-align:center;color:var(--muted)}
   @media (max-width:900px){.lwrap{grid-template-columns:1fr}.side-wrap>summary{display:list-item}.side{position:static;max-height:none}.filters{grid-template-columns:1fr 1fr}.filters .wide{grid-column:1/-1}}
@@ -163,14 +174,18 @@
     <p class="muted">У каждого профиля свои закладки, история и тайм-коды. «Основной» — общая область, где лежат данные, накопленные до LampacHub. Нажмите на аватар, чтобы выбрать готовый или загрузить с ПК.</p>
     <p class="muted">Настройки Lampa (язык, тема, вид интерфейса, источники, парсер и TorrServer) общие для всех устройств профиля. Плеер, размер интерфейса и другие параметры конкретного экрана остаются на устройстве. Галочка «плагины» переносит ещё и плагины, установленные вручную в Lampa.</p>
     <p class="muted">Детский профиль: в Lampa скрыта «Клубничка», карточки с возрастным рейтингом выше лимита не открываются, из списков убираются тайтлы 18+, ужасы и триллеры (при лимите ниже 16+).</p>
-    <div class="scroll"><table id="profiles"></table></div>
-    <div class="row" style="margin-top:12px">
-      <span class="avatar big" id="pAvatarView" title="Выбрать аватар">+</span>
-      <input id="pName" placeholder="Имя нового профиля" maxlength="40">
-      <label class="row muted"><input type="checkbox" id="pChild"> детский</label>
-      <select id="pAge" class="age" title="Возрастной лимит детского профиля"></select>
-      <button id="pAdd">Добавить</button>
-    </div>
+    <div class="scroll"><table id="profilesTable">
+      <thead><tr><th>Аватар</th><th>Имя</th><th>Детский</th><th>Настройки</th><th class="hide-sm">ID</th><th></th></tr></thead>
+      <tbody id="profiles"></tbody>
+      <tfoot><tr class="newrow">
+        <td><span class="avatar big" id="pAvatarView" title="Выбрать аватар">+</span></td>
+        <td><input id="pName" data-f="name" placeholder="Имя нового профиля" maxlength="40"></td>
+        <td><div class="row" style="flex-wrap:nowrap"><input type="checkbox" id="pChild" title="Детский профиль"><select id="pAge" class="age" title="Возрастной лимит детского профиля"></select></div></td>
+        <td class="muted">новый профиль</td>
+        <td class="hide-sm"></td>
+        <td><div class="row" style="flex-wrap:nowrap;justify-content:flex-end"><button id="pAdd">Добавить</button></div></td>
+      </tr></tfoot>
+    </table></div>
   </section>
 
   <section data-tab="lists">
@@ -238,6 +253,29 @@
       <button id="iYummyGo">Импортировать</button>
     </div>
     <p class="muted">Публичные списки читаются без входа. Если списки закрыты, откройте их в настройках приватности Yummy или вставьте токен входа. Токен нужен только на время импорта и нигде не сохраняется. Пароль от Yummy не нужен.</p>
+    <div class="row">
+      <button class="ghost" data-ifile="iYummyFile">Загрузить файл экспорта…</button>
+      <input type="file" id="iYummyFile" accept=".json,.html,.htm,application/json,text/html" hidden>
+      <span class="muted">Проще всего: на старом сайте Yummy (old.yummyani.me) экспортируйте списки в JSON или HTML и загрузите файл сюда. Ни токен, ни вход не нужны.</span>
+    </div>
+    </div><div class="sub">
+    <h3>Shikimori</h3>
+    <div class="row">
+      <input id="iShikiUser" placeholder="Ник или ссылка на профиль Shikimori" style="flex:1;min-width:14em">
+      <button id="iShikiGo">Импортировать</button>
+      <button class="ghost" data-ifile="iShikiFile">Файл экспорта…</button>
+      <input type="file" id="iShikiFile" accept=".json,.xml,.gz,application/json,text/xml" hidden>
+    </div>
+    <p class="muted">Открытый список читается по нику без входа: Смотрю, Запланировано, Просмотрено, Отложено, Брошено, Пересматриваю и Избранное. Если профиль закрыт, загрузите файл экспорта (Настройки профиля → Списки → Экспорт, JSON или XML).</p>
+    </div><div class="sub">
+    <h3>MyAnimeList</h3>
+    <div class="row">
+      <input id="iMalUser" placeholder="Ник или ссылка на профиль MyAnimeList" style="flex:1;min-width:14em">
+      <button id="iMalGo">Импортировать</button>
+      <button class="ghost" data-ifile="iMalFile">Файл экспорта…</button>
+      <input type="file" id="iMalFile" accept=".xml,.gz,text/xml,application/gzip" hidden>
+    </div>
+    <p class="muted">Открытый список читается по нику. Для закрытого: myanimelist.net/panel.php?go=export → Export My Anime List, загрузите полученный .xml.gz как есть. Статусы: Watching, Plan to Watch, Completed, On-Hold, Dropped.</p>
     </div><div class="sub">
     <h3>AniLiberty</h3>
     <div class="row">
@@ -253,7 +291,7 @@
     <p class="muted">Импортируются коллекции (Смотрю, Запланировано → Планирую, Просмотрено, Отложено, Брошено) и Избранное. Логин, пароль и токен нужны только на время импорта и нигде не сохраняются.</p>
     </div><div class="sub">
     <h3>Anihub</h3>
-    <p class="muted">У Anihub (anihub.in.ua) нет открытого API и экспорта списков, поэтому прямой импорт невозможен. Если списки есть на Shikimori или MAL, их можно перенести через Yummy или резервную копию.</p>
+    <p class="muted">У Anihub (anihub.in.ua) нет открытого API и экспорта списков, поэтому прямой импорт невозможен. Если списки есть на Shikimori или MAL, импортируйте их оттуда.</p>
     </div><div class="sub">
     <h3>Резервная копия Lampa / CUB</h3>
     <div class="row">
@@ -385,8 +423,7 @@
         '<button data-confirm="' + esc(p.code) + '">Подтвердить</button></div>';
     }).join('') || '<span class="muted">Сейчас никто не ждёт подтверждения.</span>';
 
-    $('profiles').innerHTML = '<tr><th>Аватар</th><th>Имя</th><th>Детский</th><th>Настройки</th><th class="hide-sm">ID</th><th></th></tr>' +
-      state.profiles.map(function (p) {
+    $('profiles').innerHTML = state.profiles.map(function (p) {
         return '<tr data-id="' + esc(p.id) + '"><td>' + avatar(p, true) + '</td>' +
           '<td><input data-f="name" value="' + esc(p.name) + '" maxlength="40"></td>' +
           '<td><div class="row" style="flex-wrap:nowrap"><input type="checkbox" data-f="child"' + (p.child ? ' checked' : '') + '>' +
@@ -796,10 +833,12 @@
         return '<div class="pc' + (lists.selected[i.id] ? ' sel' : '') + '" data-lid="' + esc(i.id) + '">' +
           '<div class="img"' + (img ? ' style="background-image:url(\'' + esc(img) + '\')"' : '') + '>' + (img ? '' : esc(i.title)) +
           '<div class="ov"><input type="checkbox" data-lsel="' + esc(i.id) + '"' + (lists.selected[i.id] ? ' checked' : '') + ' title="Выбрать">' +
-          '<button class="star' + (i.categories.indexOf('like') >= 0 ? ' on' : '') + '" data-llike="' + esc(i.id) + '" title="Избранное">★</button></div>' +
+          '<span class="ovr"><button class="star' + (i.categories.indexOf('like') >= 0 ? ' on' : '') + '" data-llike="' + esc(i.id) + '" title="Избранное">★</button>' +
+          '<button class="del" data-ldel="' + esc(i.id) + '" title="Убрать из всех списков">✕</button></span></div>' +
           (status ? '<span class="badge-st" style="--c:' + CAT_COLOR[status] + '">' + esc(catName[status]) + '</span>' : '') + '</div>' +
           '<div class="body"><div class="t" title="' + esc(i.original || i.title) + '">' + esc(i.title) + '</div>' +
           '<div class="meta">' + (i.vote ? '<span class="rate">' + i.vote.toFixed(1) + '</span><span class="dot"></span>' : '') + esc([i.year, isAnime(i) ? 'аниме' : i.tv ? 'сериал' : 'фильм'].filter(Boolean).join(' · ')) + '</div>' +
+          infoSlot(i) +
           (v.dup[i.id] ? '<div class="muted" style="color:var(--warn)">' + esc(v.dup[i.id]) + '</div>' : '') +
           '<select class="status" style="--c:' + (CAT_COLOR[status] || 'var(--line2)') + '" data-lstatus="' + esc(i.id) + '">' + statusOptions(status, '— без статуса —') + '</select></div></div>';
       }).join('') || empty;
@@ -817,6 +856,7 @@
           '<td class="hide-sm">' + (img ? '<img class="poster" loading="lazy" src="' + esc(img) + '" alt="">' : '<span class="poster"></span>') + '</td>' +
           '<td><b>' + esc(i.title) + '</b> <span class="muted">' + esc([i.year, isAnime(i) ? 'аниме' : i.tv ? 'сериал' : 'фильм', i.vote ? '★ ' + i.vote.toFixed(1) : ''].filter(Boolean).join(' · ')) + '</span>' +
             (i.original && i.original !== i.title ? '<div class="muted">' + esc(i.original) + '</div>' : '') +
+            infoSlot(i) +
             '<div>' + chips + '<span class="muted hide-sm">id ' + esc(i.id) + '</span></div></td>' +
           '<td><select class="status" style="--c:' + (CAT_COLOR[status] || 'var(--line2)') + '" data-lstatus="' + esc(i.id) + '">' + statusOptions(status, '— без статуса —') + '</select></td>' +
           '<td><button class="star' + (i.categories.indexOf('like') >= 0 ? ' on' : '') + '" data-llike="' + esc(i.id) + '" title="Избранное">★</button></td>' +
@@ -825,6 +865,7 @@
       $('lists').innerHTML = rows || '<tr><td>' + empty + '</td></tr>';
     }
 
+    loadInfo(shown);
     $('lSelAll').checked = v.list.length > 0 && v.list.every(function (i) { return lists.selected[i.id]; });
     $('lMore').style.display = v.list.length > lists.shown ? '' : 'none';
     $('lMore').textContent = 'Показать ещё (' + (v.list.length - lists.shown) + ')';
@@ -837,6 +878,57 @@
     var n = selectedIds().length;
     $('lBulk').style.display = n ? '' : 'none';
     $('lSel').textContent = 'Выбрано: ' + n;
+  }
+
+  // Сведения TMDB: сезоны, серии, статус выхода, следующая серия (кеш на сервере)
+  var tinfo = {}, tinfoWait = {};
+  var INFO_ST = {
+    airing: ['Выходит', '#2f9e6a'], planned: ['Планируется', '#b7791f'], ended: ['Завершён', '#78797a'],
+    canceled: ['Закрыт', '#c03b3b'], released: ['Вышел', '#78797a']
+  };
+  function infoKey(i) {
+    return /^\d+$/.test(i.id) && ['', 'tmdb', 'cub'].indexOf(i.source || '') >= 0 ? (i.tv ? 'tv:' : 'movie:') + i.id : '';
+  }
+  function fmtDate(d) {
+    var t = d && new Date(d + 'T00:00:00');
+    return t && !isNaN(t) ? t.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: t.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }) : '';
+  }
+  function infoHtml(key) {
+    var d = tinfo[key];
+    if (!d) return '';
+    var st = INFO_ST[d.status], parts = [];
+    if (d.kind === 'tv') {
+      if (d.seasons) parts.push(d.seasons + ' сез.');
+      if (d.episodes) parts.push(d.episodes + ' эп.');
+    } else if (d.status === 'planned' && d.release) {
+      parts.push(fmtDate(d.release));
+    }
+    var html = (st ? '<span class="ist" style="--c:' + st[1] + '">' + st[0] + '</span>' : '') + esc(parts.join(' · '));
+    if (d.next && d.next.date) {
+      html += '<div class="inext">Новая серия ' + esc(fmtDate(d.next.date)) + (d.next.season ? ' <span class="muted">S' + d.next.season + 'E' + d.next.episode + '</span>' : '') + '</div>';
+    } else if (d.kind === 'tv' && d.status === 'airing' && d.last && d.last.date) {
+      html += '<div class="muted">Последняя ' + esc(fmtDate(d.last.date)) + ' · S' + d.last.season + 'E' + d.last.episode + '</div>';
+    }
+    return html;
+  }
+  function infoSlot(i) {
+    var key = infoKey(i);
+    return key ? '<div class="info" data-info="' + key + '">' + infoHtml(key) + '</div>' : '';
+  }
+  function loadInfo(items) {
+    var keys = items.map(infoKey).filter(function (k) { return k && !tinfo[k] && !tinfoWait[k]; });
+    for (var n = 0; n < keys.length; n += 60) (function (chunk) {
+      chunk.forEach(function (k) { tinfoWait[k] = true; });
+      api('/hub/api/titles/info', { ids: chunk.join(',') }).then(function (r) {
+        Object.keys(r.info || {}).forEach(function (k) { tinfo[k] = r.info[k]; });
+        document.querySelectorAll('[data-info]').forEach(function (el) {
+          var k = el.getAttribute('data-info');
+          if (r.info && r.info[k]) el.innerHTML = infoHtml(k);
+        });
+        // TMDB недоступен — попробуем при следующей отрисовке
+        if (r.failed) chunk.forEach(function (k) { if (!tinfo[k]) delete tinfoWait[k]; });
+      }).catch(function () { chunk.forEach(function (k) { delete tinfoWait[k]; }); });
+    })(keys.slice(n, n + 60));
   }
 
   function loadLists() {
@@ -914,8 +1006,14 @@
       if (t.classList.contains('on')) change([id], [], ['like']); else change([id], ['like'], []);
     }
     else if ((id = t.getAttribute('data-ldel'))) {
-      if (!confirm('Убрать карточку из всех списков и истории профиля?')) return;
-      api('/hub/api/lists/remove', { profile_id: lists.profile, ids: id }).then(loadLists).catch(function (e) { toast(e.message); });
+      var it = lists.items.filter(function (i) { return i.id === id; })[0];
+      if (!confirm('Убрать «' + (it ? it.title : id) + '» из всех списков и истории профиля?')) return;
+      api('/hub/api/lists/remove', { profile_id: lists.profile, ids: id }).then(function () {
+        lists.items = lists.items.filter(function (i) { return i.id !== id; });
+        delete lists.selected[id];
+        renderLists();
+        toast('Убрано из списков');
+      }).catch(function (e) { toast(e.message); });
     }
   });
 
@@ -976,7 +1074,7 @@
     var s = r && r.state;
     if (!s || !s.started) { $('iState').textContent = ''; return; }
     var lines = [];
-    lines.push((s.running ? '⏳ ' : (s.error ? '⚠️ ' : '✅ ')) + ({ yummy: 'Yummy', aniliberty: 'AniLiberty' }[s.source] || s.source) + ' → «' + (findProfile(s.profile_id).name || s.profile_id) + '»: ' + (s.stage || ''));
+    lines.push((s.running ? '⏳ ' : (s.error ? '⚠️ ' : '✅ ')) + (SRC_NAME[s.source] || s.source) + ' → «' + (findProfile(s.profile_id).name || s.profile_id) + '»: ' + (s.stage || ''));
     if (s.total) lines.push('Обработано ' + s.processed + ' из ' + s.total + ' · по id ' + s.by_ids + ' · по названию ' + s.by_search + ' · в очередь ' + s.queued);
     if (!s.running && !s.error && s.finished) lines.push('Записано карточек: ' + s.imported + (s.merged ? ' (сезоны объединены: ' + s.merged + ')' : ''));
     if (s.error) lines.push('Ошибка: ' + s.error);
@@ -1031,6 +1129,40 @@
     if (!confirm('Убрать из очереди все несопоставленные тайтлы профиля? В списки они не попадут.')) return;
     api('/hub/api/import/queue/skip', { profile_id: impProfile(), all: true }).then(loadQueue).catch(function (e) { toast(e.message); });
   };
+
+  var SRC_NAME = { yummy: 'Yummy', aniliberty: 'AniLiberty', shikimori: 'Shikimori', mal: 'MyAnimeList' };
+
+  // Файл экспорта Yummy / Shikimori / MAL: формат сервер определяет сам
+  function importFile(file) {
+    if (!file) return;
+    var name = findProfile(impProfile()).name || impProfile();
+    if (!confirm('Импортировать списки из «' + file.name + '» в профиль «' + name + '»?')) return;
+    fetch('/hub/api/import/file?profile_id=' + encodeURIComponent(impProfile()), {
+      method: 'POST', credentials: 'same-origin', headers: { 'X-Hub': '1', 'Content-Type': 'application/octet-stream' }, body: file
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
+    }).then(function (r) {
+      toast((SRC_NAME[r.source] || r.source) + ': в файле ' + r.count + ' тайтлов, сопоставляю с TMDB');
+      imp.wasRunning = true; pollImport();
+    }).catch(function (e) { toast(e.message); });
+  }
+  document.querySelectorAll('[data-ifile]').forEach(function (b) {
+    var input = $(b.getAttribute('data-ifile'));
+    b.onclick = function () { input.value = ''; input.click(); };
+    input.onchange = function () { importFile(this.files[0]); };
+  });
+
+  function importRates(service, inputId, label) {
+    var user = $(inputId).value.trim();
+    if (!user) { toast('Укажите ник или ссылку на профиль ' + label); return; }
+    var name = findProfile(impProfile()).name || impProfile();
+    if (!confirm('Импортировать список ' + label + ' «' + user + '» в профиль «' + name + '»?')) return;
+    api('/hub/api/import/' + service, { profile_id: impProfile(), user: user })
+      .then(function () { imp.wasRunning = true; pollImport(); })
+      .catch(function (e) { toast(e.message); });
+  }
+  $('iShikiGo').onclick = function () { importRates('shikimori', 'iShikiUser', 'Shikimori'); };
+  $('iMalGo').onclick = function () { importRates('mal', 'iMalUser', 'MyAnimeList'); };
 
   $('iYummyGo').onclick = function () {
     var user = $('iYummyUser').value.trim();
