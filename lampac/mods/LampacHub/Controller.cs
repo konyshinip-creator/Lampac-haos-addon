@@ -96,39 +96,6 @@ public class HubDeviceController : BaseController
         return Reply(new { servers = HubStore.GetServers() });
     }
 
-    /// <summary>Админка: сохранить список серверов. data — JSON [{name, url}]</summary>
-    [HttpPost]
-    [Authorization(accessDeniedMessage: "unauthorized")]
-    [Route("hub/api/servers")]
-    public ActionResult ServersSave(string data)
-    {
-        if (Off)
-            return NotFound();
-
-        if (CrossSite())
-            return Reply(new { error = "forbidden" }, 403);
-
-        JArray input;
-        try { input = JArray.Parse(data ?? "[]"); }
-        catch { return Reply(new { error = "Неверный список" }, 400); }
-
-        var list = new JArray();
-        foreach (var s in input.OfType<JObject>().Take(30))
-        {
-            string url = HubStore.Trim((string)s["url"], 300).TrimEnd('/');
-            if (url.Length > 0 && !Regex.IsMatch(url, "^https?://", RegexOptions.IgnoreCase))
-                url = "http://" + url;
-            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))
-                return Reply(new { error = "Неверный адрес: " + (string)s["url"] }, 400);
-
-            string name = HubStore.Trim((string)s["name"], 60);
-            list.Add(new JObject { ["name"] = name.Length > 0 ? name : uri.Authority, ["url"] = url });
-        }
-
-        HubStore.SetServers(list);
-        return Reply(new { status = "ok", servers = list });
-    }
-
     [HttpGet, AllowAnonymous]
     [Route("hub/device/me")]
     public ActionResult Me(string hub_token)
@@ -432,6 +399,39 @@ public class HubAdminController : BaseController
                 ttl = (int)(p.expires - now).TotalSeconds
             })
         });
+    }
+
+    /// <summary>Админка: сохранить список серверов. data — JSON [{name, url}]</summary>
+    [HttpPost]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/servers")]
+    public ActionResult ServersSave(string data)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        JArray input;
+        try { input = JArray.Parse(data ?? "[]"); }
+        catch { return Reply(new { error = "Неверный список" }, 400); }
+
+        var list = new JArray();
+        foreach (var s in input.OfType<JObject>().Take(30))
+        {
+            string url = HubStore.Trim((string)s["url"], 300).TrimEnd('/');
+            if (url.Length > 0 && !Regex.IsMatch(url, "^https?://", RegexOptions.IgnoreCase))
+                url = "http://" + url;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))
+                return Reply(new { error = "Неверный адрес: " + (string)s["url"] }, 400);
+
+            string name = HubStore.Trim((string)s["name"], 60);
+            list.Add(new JObject { ["name"] = name.Length > 0 ? name : uri.Authority, ["url"] = url });
+        }
+
+        HubStore.SetServers(list);
+        return Reply(new { status = "ok", servers = list });
     }
 
     [HttpPost]
