@@ -177,6 +177,12 @@ jobs:
             | jq -e '.source == "yummy" and .count == 1' >/dev/null || { echo "::error::hub: импорт HTML-экспорта Yummy"; FAIL=1; }
           curl -fsS "${ADM[@]}" -X POST -d "ids=tv:1399,movie:603,bad" "$H/hub/api/titles/info" | jq -e 'has("info") and has("failed")' >/dev/null || { echo "::error::hub: titles/info"; FAIL=1; }
           curl -sS "${ADM[@]}" -X POST -d "ids=tv:1399" "$H/hub/api/titles/info" | jq -e '.info["tv:1399"].seasons > 0' >/dev/null || echo "::warning::hub: сведения TMDB о тайтле не получены (TMDB с раннера)"
+          # Серверы для меню выбора в Lampa
+          curl -fsS "${ADM[@]}" -X POST --data-urlencode 'data=[{"name":"Дача","url":"192.168.1.20:9118/"}]' "$H/hub/api/servers" \
+            | jq -e '.servers[0].url == "http://192.168.1.20:9118"' >/dev/null || { echo "::error::hub: сохранение серверов"; FAIL=1; }
+          curl -fsS "$H/hub/servers" | jq -e '.servers[0].name == "Дача"' >/dev/null || { echo "::error::hub: список серверов для Lampa"; FAIL=1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' "${ADM[@]}" -X POST --data-urlencode 'data=[{"url":"::::"}]' "$H/hub/api/servers")
+          echo "servers с неверным адресом -> $code"; [ "$code" = "400" ] || FAIL=1
           if docker logs lampac 2>&1 | grep -E "error CS[0-9]+"; then FAIL=1; fi
           docker exec lampac cat /config/init.conf | jq -c '{SkipModules: .BaseModule.SkipModules, Senku, Anistar, Animaunt, AnimeFox, AniTokyo, Hentasis, HentaiUkr, Xhamster, AnimeMonitor, LampacHub, customPlugins: .LampaWeb.customPlugins}'
           if [ "$FAIL" = "1" ]; then

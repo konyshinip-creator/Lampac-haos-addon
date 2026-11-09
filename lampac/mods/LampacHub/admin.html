@@ -307,6 +307,7 @@
       <button class="ghost" id="iQReload">Обновить</button>
       <button class="danger" id="iQClear">Очистить очередь профиля</button>
     </div>
+    <p class="muted" style="margin-top:0">Если поиск не находит тайтл, найдите его на сайте TMDB и вставьте в поле ссылку (themoviedb.org/tv/…) или id — он сразу попадёт в список. Тайтлы, которых в TMDB нет, Lampa показать не сможет: их можно оставить в очереди до появления в TMDB.</p>
     <div id="iQueue"></div>
     </div>
   </section>
@@ -325,6 +326,14 @@
     <h2>Устройства</h2>
     <div class="scroll"><table id="devices"></table></div>
     <p class="muted">Отзыв удаляет вход устройства: при следующем запуске Lampa оно выйдет из LampacHub и вернётся к экрану входа.</p>
+    <h2 style="margin-top:22px">Серверы для меню выбора</h2>
+    <p class="muted">При запуске Lampa покажет меню выбора сервера (Настройки → LampacHub → Серверы, там же список можно править на устройстве). Серверы отсюда устройства получают сами, а этот сервер в меню есть всегда. Меню работает, пока доступен сервер, с которого запускается приложение.</p>
+    <div class="scroll"><table id="servers"></table></div>
+    <div class="row" style="margin-top:10px">
+      <input id="sName" placeholder="Название, например Дача" maxlength="60" style="min-width:10em">
+      <input id="sUrl" placeholder="http://192.168.1.20:9118" style="flex:1;min-width:14em">
+      <button id="sAdd">Добавить</button>
+    </div>
   </section>
 </main>
 <div id="picker"><div class="box">
@@ -434,6 +443,7 @@
           (p.id === '0' ? '<button class="danger" disabled title="Основной профиль удалить нельзя">Удалить</button>' : '<button class="danger" data-del="' + esc(p.id) + '">Удалить</button>') + '</div></td></tr>';
       }).join('');
 
+    renderServers();
     $('devices').innerHTML = '<tr><th>Устройство</th><th>Профиль</th><th>Последний вход</th><th class="hide-sm">IP</th><th></th></tr>' +
       (state.devices.length ? state.devices.map(function (d) {
         return '<tr><td><input data-dn="' + esc(d.id) + '" value="' + esc(d.name) + '" title="' + esc(d.user_agent) + '"></td>' +
@@ -444,6 +454,42 @@
           '<button class="danger" data-revoke="' + esc(d.id) + '">Отозвать</button></div></td></tr>';
       }).join('') : '<tr><td colspan="5" class="muted">Устройств пока нет.</td></tr>');
   }
+
+  function renderServers() {
+    var list = state.servers || [];
+    $('servers').innerHTML = '<tr><th>Название</th><th>Адрес</th><th></th></tr>' + (list.length ? list.map(function (sv, n) {
+      return '<tr><td><input data-sn="' + n + '" value="' + esc(sv.name) + '" maxlength="60"></td>' +
+        '<td><input data-su="' + n + '" value="' + esc(sv.url) + '" style="width:100%"></td>' +
+        '<td><div class="row" style="flex-wrap:nowrap;justify-content:flex-end"><button class="ghost" data-ssave="' + n + '">Сохранить</button>' +
+        '<button class="danger" data-sdel="' + n + '">Удалить</button></div></td></tr>';
+    }).join('') : '<tr><td colspan="3" class="muted">Других серверов нет.</td></tr>');
+  }
+
+  function saveServers(list, msg) {
+    return api('/hub/api/servers', { data: JSON.stringify(list) })
+      .then(function (r) { state.servers = r.servers; renderServers(); toast(msg); })
+      .catch(function (e) { toast(e.message); });
+  }
+
+  $('sAdd').onclick = function () {
+    var url = $('sUrl').value.trim();
+    if (!url) { toast('Укажите адрес сервера'); return; }
+    saveServers((state.servers || []).concat([{ name: $('sName').value.trim(), url: url }]), 'Сервер добавлен')
+      .then(function () { $('sName').value = ''; $('sUrl').value = ''; });
+  };
+
+  document.addEventListener('click', function (e) {
+    var t = e.target, n;
+    if ((n = t.getAttribute && t.getAttribute('data-ssave')) !== null && n !== undefined) {
+      var list = (state.servers || []).slice();
+      list[+n] = { name: document.querySelector('[data-sn="' + n + '"]').value.trim(), url: document.querySelector('[data-su="' + n + '"]').value.trim() };
+      saveServers(list, 'Сохранено');
+    }
+    else if ((n = t.getAttribute && t.getAttribute('data-sdel')) !== null && n !== undefined) {
+      if (!confirm('Удалить сервер из меню?')) return;
+      saveServers((state.servers || []).filter(function (_, i) { return i !== +n; }), 'Удалено');
+    }
+  });
 
   function confirmCode(code, profile, name) {
     return api('/hub/api/code/confirm', { code: code, profile_id: profile, name: name || '' })
@@ -1108,9 +1154,10 @@
       var cats = (q.categories || []).map(function (c) { return '<span class="chip">' + esc(catName[c] || c) + '</span>'; }).join('');
       return '<div class="qitem" data-q="' + esc(q.id) + '"><div><b>' + esc(q.title) + '</b> <span class="muted">' + esc([q.year || '', q.source, q.kind === 'movie' ? 'фильм' : q.kind === 'tv' ? 'сериал' : ''].filter(Boolean).join(' · ')) + '</span> ' + cats + '</div>' +
         '<div class="qc">' + ((q.candidates || []).map(function (c) { return candButton(q.id, c); }).join('') || '<span class="muted">Кандидатов нет — найдите вручную.</span>') + '</div>' +
-        '<div class="row" style="margin-top:6px"><input data-qq="' + esc(q.id) + '" value="' + esc(q.title) + '" style="flex:1;min-width:10em">' +
+        '<div class="row" style="margin-top:6px"><input data-qq="' + esc(q.id) + '" value="' + esc(q.title) + '" title="Название, ссылка на тайтл TMDB или его id" style="flex:1;min-width:10em">' +
         '<select data-qk="' + esc(q.id) + '"><option value="">все</option><option value="tv">сериалы</option><option value="movie">фильмы</option></select>' +
         '<button class="ghost" data-qsearch="' + esc(q.id) + '">Найти в TMDB</button>' +
+        '<a class="muted" target="_blank" rel="noopener" href="https://www.themoviedb.org/search?language=ru-RU&query=' + encodeURIComponent(q.title) + '">искать на сайте TMDB ↗</a>' +
         '<button class="ghost" data-qskip="' + esc(q.id) + '">Пропустить</button></div></div>';
     }).join('') + (imp.queue.length > 50 ? '<p class="muted">Показаны первые 50 из ' + imp.queue.length + '.</p>' : '') : '<span class="muted">Очередь пуста.</span>';
   }
@@ -1220,6 +1267,16 @@
     else if ((id = t.getAttribute('data-qsearch'))) {
       var q = document.querySelector('input[data-qq="' + id + '"]').value.trim();
       var kind = document.querySelector('select[data-qk="' + id + '"]').value;
+      // Ссылка themoviedb.org/tv/123-name, tv:123 или просто id — сразу в список, без поиска
+      var direct = q.match(/themoviedb\.org\/(?:[a-z-]+\/)?(tv|movie)\/(\d+)/i) || q.match(/^(tv|movie)[:\/](\d+)$/i);
+      if (direct || /^\d+$/.test(q)) {
+        var dk = direct ? direct[1].toLowerCase() : kind, did = direct ? direct[2] : q;
+        if (!dk) { toast('Для id выберите «сериалы» или «фильмы», или вставьте ссылку TMDB целиком'); return; }
+        api('/hub/api/import/queue/resolve', { id: id, kind: dk, tmdb_id: did })
+          .then(function () { toast('Добавлено'); imp.queue = imp.queue.filter(function (x) { return x.id !== id; }); renderQueue(); })
+          .catch(function (err) { toast(err.message); });
+        return;
+      }
       var box = document.querySelector('[data-q="' + id + '"] .qc');
       box.innerHTML = '<span class="muted">Поиск…</span>';
       api('/hub/api/tmdb/search?q=' + encodeURIComponent(q) + '&kind=' + encodeURIComponent(kind)).then(function (r) {
