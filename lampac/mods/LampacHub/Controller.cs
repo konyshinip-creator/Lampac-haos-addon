@@ -580,6 +580,27 @@ public class HubAdminController : BaseController
         return Reply(new { status = "ok" });
     }
 
+    /// <summary>Сезоны, серии, статус и следующая серия из TMDB (кеш в базе). ids: tv:123,movie:456 — до 60 за раз</summary>
+    [HttpPost]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/titles/info")]
+    public async Task<ActionResult> TitlesInfo(string ids)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        var keys = Csv(ids)
+            .Where(k => System.Text.RegularExpressions.Regex.IsMatch(k, @"^(tv|movie):\d{1,9}$"))
+            .Take(60)
+            .ToList();
+
+        var (info, failed) = await TitleInfo.Get(keys, host);
+        return Reply(new { info, failed });
+    }
+
     [HttpPost]
     [Authorization(accessDeniedMessage: "unauthorized")]
     [Route("hub/api/lists/remove")]
@@ -827,6 +848,83 @@ public class HubAdminController : BaseController
         bool started = Importer.Start("aniliberty", profile, host, state => AniLibertySource.Fetch(l, pw, otp, state));
         return started
             ? Reply(new { status = "ok", state = Importer.State })
+            : Reply(new { error = "Импорт уже идёт" }, 409);
+    }
+
+    /// <summary>Импорт открытого списка Shikimori или MyAnimeList по нику, без входа</summary>
+    [HttpPost]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/import/{service:regex(^(shikimori|mal)$)}")]
+    public ActionResult ImportRates(string service, string profile_id, string user)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        var profile = AdminProfile(profile_id);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        if (string.IsNullOrWhiteSpace(user))
+            return Reply(new { error = "Укажите ник или ссылку на профиль" }, 400);
+
+        string u = user;
+        bool started = service == "mal"
+            ? Importer.Start("mal", profile, host, state => MalSource.Fetch(u, state))
+            : Importer.Start("shikimori", profile, host, state => ShikimoriSource.Fetch(u, state));
+        return started
+            ? Reply(new { status = "ok", state = Importer.State })
+            : Reply(new { error = "Импорт уже идёт" }, 409);
+    }
+
+    /// <summary>Файл экспорта Yummy (JSON/HTML), Shikimori (JSON/XML) или MyAnimeList (XML, .gz) — сопоставление в фоне</summary>
+    [HttpPost]
+    [RequestSizeLimit(50_000_000)]
+    [Authorization(accessDeniedMessage: "unauthorized")]
+    [Route("hub/api/import/file")]
+    public async Task<ActionResult> ImportFile([FromQuery] string profile_id)
+    {
+        if (Off)
+            return NotFound();
+
+        if (CrossSite())
+            return Reply(new { error = "forbidden" }, 403);
+
+        var profile = AdminProfile(profile_id);
+        if (profile == null)
+            return Reply(new { error = "Профиль не найден" }, 404);
+
+        string source;
+        List<ExternalTitle> titles;
+        try
+        {
+            using var ms = new MemoryStream();
+            await Request.Body.CopyToAsync(ms);
+            (source, titles) = ExportFileSource.Parse(ms.ToArray());
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Reply(new { error = ex.Message }, 400);
+        }
+        catch
+        {
+            return Reply(new { error = "Не удалось прочитать файл экспорта" }, 400);
+        }
+
+        if (titles.Count == 0)
+            return Reply(new { error = "В файле нет тайтлов со статусом" }, 400);
+
+        var list = titles;
+        string name = source;
+        bool started = Importer.Start(source, profile, host, state =>
+        {
+            state.notes.Add("Файл экспорта (" + name + "): " + list.Count + " тайтлов");
+            return Task.FromResult(list);
+        });
+        return started
+            ? Reply(new { status = "ok", source, count = titles.Count, state = Importer.State })
             : Reply(new { error = "Импорт уже идёт" }, 409);
     }
 
