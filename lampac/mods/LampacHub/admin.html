@@ -325,6 +325,14 @@
     <h2>Устройства</h2>
     <div class="scroll"><table id="devices"></table></div>
     <p class="muted">Отзыв удаляет вход устройства: при следующем запуске Lampa оно выйдет из LampacHub и вернётся к экрану входа.</p>
+    <h2 style="margin-top:22px">Серверы для меню выбора</h2>
+    <p class="muted">При запуске Lampa покажет меню выбора сервера (Настройки → LampacHub → Серверы, там же список можно править на устройстве). Серверы отсюда устройства получают сами, а этот сервер в меню есть всегда. Меню работает, пока доступен сервер, с которого запускается приложение.</p>
+    <div class="scroll"><table id="servers"></table></div>
+    <div class="row" style="margin-top:10px">
+      <input id="sName" placeholder="Название, например Дача" maxlength="60" style="min-width:10em">
+      <input id="sUrl" placeholder="http://192.168.1.20:9118" style="flex:1;min-width:14em">
+      <button id="sAdd">Добавить</button>
+    </div>
   </section>
 </main>
 <div id="picker"><div class="box">
@@ -434,6 +442,7 @@
           (p.id === '0' ? '<button class="danger" disabled title="Основной профиль удалить нельзя">Удалить</button>' : '<button class="danger" data-del="' + esc(p.id) + '">Удалить</button>') + '</div></td></tr>';
       }).join('');
 
+    renderServers();
     $('devices').innerHTML = '<tr><th>Устройство</th><th>Профиль</th><th>Последний вход</th><th class="hide-sm">IP</th><th></th></tr>' +
       (state.devices.length ? state.devices.map(function (d) {
         return '<tr><td><input data-dn="' + esc(d.id) + '" value="' + esc(d.name) + '" title="' + esc(d.user_agent) + '"></td>' +
@@ -444,6 +453,42 @@
           '<button class="danger" data-revoke="' + esc(d.id) + '">Отозвать</button></div></td></tr>';
       }).join('') : '<tr><td colspan="5" class="muted">Устройств пока нет.</td></tr>');
   }
+
+  function renderServers() {
+    var list = state.servers || [];
+    $('servers').innerHTML = '<tr><th>Название</th><th>Адрес</th><th></th></tr>' + (list.length ? list.map(function (sv, n) {
+      return '<tr><td><input data-sn="' + n + '" value="' + esc(sv.name) + '" maxlength="60"></td>' +
+        '<td><input data-su="' + n + '" value="' + esc(sv.url) + '" style="width:100%"></td>' +
+        '<td><div class="row" style="flex-wrap:nowrap;justify-content:flex-end"><button class="ghost" data-ssave="' + n + '">Сохранить</button>' +
+        '<button class="danger" data-sdel="' + n + '">Удалить</button></div></td></tr>';
+    }).join('') : '<tr><td colspan="3" class="muted">Других серверов нет.</td></tr>');
+  }
+
+  function saveServers(list, msg) {
+    return api('/hub/api/servers', { data: JSON.stringify(list) })
+      .then(function (r) { state.servers = r.servers; renderServers(); toast(msg); })
+      .catch(function (e) { toast(e.message); });
+  }
+
+  $('sAdd').onclick = function () {
+    var url = $('sUrl').value.trim();
+    if (!url) { toast('Укажите адрес сервера'); return; }
+    saveServers((state.servers || []).concat([{ name: $('sName').value.trim(), url: url }]), 'Сервер добавлен')
+      .then(function () { $('sName').value = ''; $('sUrl').value = ''; });
+  };
+
+  document.addEventListener('click', function (e) {
+    var t = e.target, n;
+    if ((n = t.getAttribute && t.getAttribute('data-ssave')) !== null && n !== undefined) {
+      var list = (state.servers || []).slice();
+      list[+n] = { name: document.querySelector('[data-sn="' + n + '"]').value.trim(), url: document.querySelector('[data-su="' + n + '"]').value.trim() };
+      saveServers(list, 'Сохранено');
+    }
+    else if ((n = t.getAttribute && t.getAttribute('data-sdel')) !== null && n !== undefined) {
+      if (!confirm('Удалить сервер из меню?')) return;
+      saveServers((state.servers || []).filter(function (_, i) { return i !== +n; }), 'Удалено');
+    }
+  });
 
   function confirmCode(code, profile, name) {
     return api('/hub/api/code/confirm', { code: code, profile_id: profile, name: name || '' })

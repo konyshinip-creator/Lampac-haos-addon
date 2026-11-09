@@ -700,6 +700,20 @@ ON CONFLICT(id) DO UPDATE SET title = excluded.title, year = excluded.year, kind
     }
     #endregion
 
+    #region servers
+    /// <summary>Серверы для меню выбора при запуске Lampa: [{name, url}]</summary>
+    public static JArray GetServers()
+    {
+        try { return JArray.Parse(GetMeta("servers") ?? "[]"); } catch { return new JArray(); }
+    }
+
+    public static void SetServers(JArray servers)
+    {
+        lock (_lock)
+            SetMeta("servers", servers.ToString(Formatting.None));
+    }
+    #endregion
+
     #region pin
     /// <summary>PIN выхода из детского профиля, общий на аккаунт. Хранится как SHA-256 с солью.</summary>
     public static bool HasPin => !string.IsNullOrEmpty(GetMeta("pin"));

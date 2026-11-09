@@ -358,6 +358,19 @@
 
     Lampa.SettingsApi.addParam({
       component: 'lampachub',
+      param: { name: 'lampachub_servers_menu', type: 'button' },
+      field: { name: 'Серверы', description: 'Выбрать другой сервер Lampac или изменить список' },
+      onChange: function () { serverMenu(false); }
+    });
+
+    Lampa.SettingsApi.addParam({
+      component: 'lampachub',
+      param: { name: KEY_SERVERS_ASK, type: 'trigger', default: true },
+      field: { name: 'Выбор сервера при запуске', description: 'Показывать меню серверов при старте, если их больше одного' }
+    });
+
+    Lampa.SettingsApi.addParam({
+      component: 'lampachub',
       param: { name: 'lampachub_logout', type: 'button' },
       field: { name: 'Выйти', description: 'Отключить это устройство от LampacHub' },
       onChange: function () {
@@ -921,8 +934,181 @@
     if (urls.length) Lampa.Utils.putScriptAsync(urls, function () { });
   }
 
+  // --- серверы ---------------------------------------------------------------
+  /**
+   * Меню выбора сервера при запуске. Список хранится на устройстве (у каждого адреса свой
+   * localStorage, поэтому при переходе он передаётся в адресе ?hub_servers=) и дополняется
+   * серверами из админки (/hub/servers). Этот сервер в списке есть всегда.
+   */
+  var KEY_SERVERS = 'lampachub_servers';
+  var KEY_SERVERS_ASK = 'lampachub_servers_ask';
+  var serverMenuShown = false;
+
+  function normUrl(url) {
+    url = String(url || '').trim().replace(/\/+$/, '');
+    if (url && !/^https?:\/\//i.test(url)) url = 'http://' + url;
+    return url;
+  }
+
+  // Адрес этого Lampac: сервер подставляет его в HOST, иначе берём адрес страницы
+  function hereUrl() { return normUrl(/^https?:\/\//i.test(HOST) ? HOST : window.location.protocol + '//' + window.location.host); }
+
+  function sameServer(a, b) { return normUrl(a).toLowerCase() === normUrl(b).toLowerCase(); }
+
+  function servers() {
+    var list = Lampa.Storage.get(KEY_SERVERS, '[]');
+    return Array.isArray(list) ? list.filter(function (s) { return s && s.url; }) : [];
+  }
+
+  function saveServers(list) {
+    var seen = {}, out = [];
+    list.forEach(function (s) {
+      var url = normUrl(s.url), key = url.toLowerCase();
+      if (!url || seen[key]) return;
+      seen[key] = true;
+      out.push({ name: String(s.name || '').trim() || url.replace(/^https?:\/\//, ''), url: url });
+    });
+    Lampa.Storage.set(KEY_SERVERS, out);
+    return out;
+  }
+
+  function mergeServers(extra) {
+    var list = servers();
+    (extra || []).forEach(function (s) {
+      if (s && s.url && !list.some(function (x) { return sameServer(x.url, s.url); })) list.push(s);
+    });
+    if (!list.some(function (x) { return sameServer(x.url, hereUrl()); }))
+      list.unshift({ name: 'Этот сервер (' + hereUrl().replace(/^https?:\/\//, '') + ')', url: hereUrl() });
+    return saveServers(list);
+  }
+
+  function askServers() { return Lampa.Storage.field ? Lampa.Storage.field(KEY_SERVERS_ASK) !== false : Lampa.Storage.get(KEY_SERVERS_ASK, true) !== false; }
+
+  function sessionGet(k) { try { return window.sessionStorage.getItem(k); } catch (e) { return null; } }
+  function sessionSet(k, v) { try { window.sessionStorage.setItem(k, v); } catch (e) { } }
+
+  function goServer(url) {
+    if (sameServer(url, hereUrl())) return;
+    Lampa.Noty.show('Переход на ' + url);
+    var payload = encodeURIComponent(JSON.stringify(servers()));
+    setTimeout(function () { window.location.href = normUrl(url) + '/?hub_chosen=1&hub_servers=' + payload; }, 300);
+  }
+
+  function serverMenu(atStart) {
+    var list = servers();
+    var previous = Lampa.Controller.enabled().name;
+    var items = list.map(function (s) {
+      var here = sameServer(s.url, hereUrl());
+      return { title: s.name, subtitle: s.url + (here ? ' · сейчас' : ''), selected: here, url: s.url };
+    });
+    items.push({ title: 'Изменить список…', action: 'edit' });
+
+    Lampa.Select.show({
+      title: atStart ? 'Выберите сервер' : 'Серверы',
+      items: items,
+      onSelect: function (item) {
+        Lampa.Controller.toggle(previous);
+        if (item.action === 'edit') editServers();
+        else goServer(item.url);
+      },
+      onBack: function () { Lampa.Controller.toggle(previous); }
+    });
+  }
+
+  function input(title, value, done) {
+    Lampa.Input.edit({ title: title, value: value || '', free: true, nosave: true }, function (v) { done(String(v || '').trim()); });
+  }
+
+  function editServers() {
+    var list = servers();
+    var previous = Lampa.Controller.enabled().name;
+    var items = list.map(function (s, n) { return { title: s.name, subtitle: s.url, index: n }; });
+    items.unshift({ title: '+ Добавить сервер', action: 'add' });
+
+    Lampa.Select.show({
+      title: 'Изменить список серверов',
+      items: items,
+      onSelect: function (item) {
+        Lampa.Controller.toggle(previous);
+        if (item.action === 'add') {
+          input('Адрес сервера, например 192.168.1.20:9118', '', function (url) {
+            if (!url) return;
+            input('Название', '', function (name) {
+              saveServers(servers().concat([{ name: name, url: url }]));
+              Lampa.Noty.show('Сервер добавлен');
+              editServers();
+            });
+          });
+        }
+        else editServer(item.index);
+      },
+      onBack: function () { Lampa.Controller.toggle(previous); }
+    });
+  }
+
+  function editServer(index) {
+    var s = servers()[index];
+    if (!s) return;
+    var previous = Lampa.Controller.enabled().name;
+    Lampa.Select.show({
+      title: s.name,
+      items: [
+        { title: 'Открыть', action: 'open' },
+        { title: 'Переименовать', action: 'name' },
+        { title: 'Изменить адрес', action: 'url' },
+        { title: 'Поднять в начало', action: 'top' },
+        { title: 'Удалить', action: 'del' }
+      ],
+      onSelect: function (item) {
+        Lampa.Controller.toggle(previous);
+        var list = servers();
+        if (item.action === 'open') goServer(s.url);
+        else if (item.action === 'name') input('Название', s.name, function (v) { if (v) { list[index].name = v; saveServers(list); } editServers(); });
+        else if (item.action === 'url') input('Адрес сервера', s.url, function (v) { if (v) { list[index].url = v; saveServers(list); } editServers(); });
+        else if (item.action === 'top') { list.unshift(list.splice(index, 1)[0]); saveServers(list); editServers(); }
+        else if (item.action === 'del') {
+          if (sameServer(s.url, hereUrl())) { Lampa.Noty.show('Текущий сервер удалить нельзя'); editServers(); return; }
+          list.splice(index, 1); saveServers(list); editServers();
+        }
+      },
+      onBack: function () { Lampa.Controller.toggle(previous); editServers(); }
+    });
+  }
+
+  function startServers() {
+    var chosen = false;
+    try {
+      // Без URLSearchParams: на старых ТВ его нет
+      var params = {}, rest = [];
+      window.location.search.replace(/^\?/, '').split('&').forEach(function (pair) {
+        if (!pair) return;
+        var i = pair.indexOf('='), k = decodeURIComponent(i < 0 ? pair : pair.slice(0, i));
+        if (k === 'hub_servers' || k === 'hub_chosen') params[k] = decodeURIComponent(i < 0 ? '' : pair.slice(i + 1));
+        else rest.push(pair);
+      });
+      if (params.hub_servers) mergeServers(JSON.parse(params.hub_servers));
+      chosen = params.hub_chosen === '1';
+      if ((params.hub_servers || chosen) && window.history && history.replaceState)
+        history.replaceState(null, '', window.location.pathname + (rest.length ? '?' + rest.join('&') : '') + window.location.hash);
+    } catch (e) { }
+
+    mergeServers([]);
+    if (chosen) sessionSet('lampachub_server_chosen', '1');
+
+    request('GET', '/hub/servers', {}, function (status, data) {
+      if (status === 200 && data && Array.isArray(data.servers)) mergeServers(data.servers);
+
+      // Один раз за запуск приложения; перезагрузка при смене профиля меню не показывает
+      if (sessionGet('lampachub_server_chosen') || !askServers() || servers().length < 2) return;
+      sessionSet('lampachub_server_chosen', '1');
+      serverMenuShown = true;
+      setTimeout(function () { serverMenu(true); }, 1200);
+    });
+  }
+
   function start() {
     addSettings();
+    startServers();
     addMenu();
     startChildMode();
     watchSettings();
@@ -941,6 +1127,8 @@
     else if (!Lampa.Storage.get(KEY_PROMPTED, false)) {
       Lampa.Storage.set(KEY_PROMPTED, true);
       setTimeout(function () {
+        // Сначала выбор сервера: предложение входа покажем при следующем запуске
+        if (serverMenuShown) { Lampa.Storage.set(KEY_PROMPTED, false); return; }
         var previous = Lampa.Controller.enabled().name;
         Lampa.Select.show({
           title: 'LampacHub: подключить устройство?',
