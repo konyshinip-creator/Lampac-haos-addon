@@ -165,6 +165,18 @@ jobs:
           code=$(curl -s -o /dev/null -w '%{http_code}' --cookie "accspasswd=ci-test" -X POST -d "profile_id=0&user=1" "$H/hub/api/import/yummy")
           echo "import/yummy без X-Hub -> $code"; [ "$code" = "403" ] || FAIL=1
           curl -sS "${ADM[@]}" "$H/hub/api/tmdb/search?q=Cowboy%20Bebop&kind=tv" | jq -e '.results | length > 0' >/dev/null || echo "::warning::hub: TMDB с раннера не ответил (это не ошибка модуля)"
+          # Shikimori / MAL по нику, файлы экспорта, сведения о тайтлах
+          for svc in shikimori mal; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${ADM[@]}" -X POST -d "profile_id=0&user=" "$H/hub/api/import/$svc")
+            echo "import/$svc без ника -> $code"; [ "$code" = "400" ] || FAIL=1
+          done
+          code=$(curl -s -o /dev/null -w '%{http_code}' "${ADM[@]}" -X POST -H "Content-Type: application/octet-stream" --data 'not an export' "$H/hub/api/import/file?profile_id=0")
+          echo "import/file мусор -> $code"; [ "$code" = "400" ] || FAIL=1
+          printf '<html><table><tr><td data-list-id="1"><h3>В Планах</h3><ul><li data-shiki-id="1" data-wa-id="1" data-id="9">Cowboy Bebop</li></ul></td></tr></table></html>' > /tmp/yummy.html
+          curl -fsS "${ADM[@]}" -X POST -H "Content-Type: application/octet-stream" --data-binary @/tmp/yummy.html "$H/hub/api/import/file?profile_id=0" \
+            | jq -e '.source == "yummy" and .count == 1' >/dev/null || { echo "::error::hub: импорт HTML-экспорта Yummy"; FAIL=1; }
+          curl -fsS "${ADM[@]}" -X POST -d "ids=tv:1399,movie:603,bad" "$H/hub/api/titles/info" | jq -e 'has("info") and has("failed")' >/dev/null || { echo "::error::hub: titles/info"; FAIL=1; }
+          curl -sS "${ADM[@]}" -X POST -d "ids=tv:1399" "$H/hub/api/titles/info" | jq -e '.info["tv:1399"].seasons > 0' >/dev/null || echo "::warning::hub: сведения TMDB о тайтле не получены (TMDB с раннера)"
           if docker logs lampac 2>&1 | grep -E "error CS[0-9]+"; then FAIL=1; fi
           docker exec lampac cat /config/init.conf | jq -c '{SkipModules: .BaseModule.SkipModules, Senku, Anistar, Animaunt, AnimeFox, AniTokyo, Hentasis, HentaiUkr, Xhamster, AnimeMonitor, LampacHub, customPlugins: .LampaWeb.customPlugins}'
           if [ "$FAIL" = "1" ]; then
