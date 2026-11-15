@@ -326,6 +326,11 @@ public static class LampaBackupSource
 {
     public static List<HubLists.Portable> Parse(JToken doc)
     {
+        // Экспорт закладок CUB (cub.red/api/bookmarks/all): {bookmarks:[{type, card_id, data}]}
+        var cub = doc is JObject root ? root["bookmarks"] as JArray : doc as JArray;
+        if (cub != null && cub.OfType<JObject>().Any(b => b["card_id"] != null && b["type"] != null))
+            return ParseCub(cub);
+
         JObject fav = Find(doc);
         if (fav == null)
             throw new InvalidOperationException("В файле нет закладок Lampa (ключ favorite)");
@@ -363,6 +368,49 @@ public static class LampaBackupSource
                 p.categories.Remove(extra);
         }
 
+        return result.Values.ToList();
+    }
+
+    static List<HubLists.Portable> ParseCub(JArray bookmarks)
+    {
+        var result = new Dictionary<string, HubLists.Portable>();
+        foreach (var b in bookmarks.OfType<JObject>())
+        {
+            string category = (string)b["type"];
+            string id = b["card_id"]?.ToString();
+            if (string.IsNullOrEmpty(id) || !SyncBookmarks.Categories.Contains(category))
+                continue;
+
+            JObject card = null;
+            try { card = b["data"] is JObject o ? o : JObject.Parse((string)b["data"] ?? "{}"); } catch { }
+            if (card == null || card["id"] == null)
+            {
+                // Без данных карточки собираем её из полей закладки
+                bool tvCard = (string)b["card_type"] == "tv";
+                card = new JObject { ["id"] = int.TryParse(id, out int n) ? n : id, ["poster_path"] = (string)b["card_poster"] ?? string.Empty };
+                card[tvCard ? "name" : "title"] = (string)b["card_title"] ?? id;
+            }
+            card["source"] ??= "tmdb";
+            // Lampa отличает сериал по name
+            if ((string)b["card_type"] == "tv" && card["name"] == null)
+                card["name"] = card["title"] ?? (string)b["card_title"] ?? id;
+
+            if (!result.TryGetValue(id, out var p))
+                result[id] = p = new HubLists.Portable { id = id, card = card, categories = new List<string>() };
+            if (!p.categories.Contains(category))
+                p.categories.Add(category);
+        }
+
+        // Статус один: при нескольких оставляем первый по порядку Lampa
+        foreach (var p in result.Values)
+        {
+            var statuses = SyncBookmarks.Categories.Where(c => SyncBookmarks.Statuses.Contains(c) && p.categories.Contains(c)).ToList();
+            foreach (var extra in statuses.Skip(1))
+                p.categories.Remove(extra);
+        }
+
+        if (result.Count == 0)
+            throw new InvalidOperationException("В экспорте CUB нет закладок");
         return result.Values.ToList();
     }
 
